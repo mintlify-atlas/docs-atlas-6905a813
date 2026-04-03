@@ -1,0 +1,153 @@
+---
+title: "Pin configuration"
+description: "How Marlin assigns and resolves pin numbers per-board using the src/pins/ directory."
+---
+
+Every board supported by Marlin has a dedicated pin definition file in `Marlin/src/pins/`. These files map named signals — stepper step/direction/enable, thermistor inputs, heater outputs, endstops, fans, and so on — to the physical pin numbers used by the target microcontroller. Marlin selects the correct file automatically at compile time based on the `MOTHERBOARD` define in `Configuration.h`.
+
+## How board selection works
+
+When you set `MOTHERBOARD` in `Configuration.h`, Marlin uses the `MB()` macro to match that value against the long `if-elif` chain in `Marlin/src/pins/pins.h`. The matching branch includes the correct board-specific header:
+
+```cpp
+// In Configuration.h
+#define MOTHERBOARD BOARD_RAMPS_14_EFB
+
+// In src/pins/pins.h (abridged)
+#elif MB(RAMPS_14_EFB, RAMPS_14_EEB, RAMPS_14_EFF, RAMPS_14_EEF, RAMPS_14_SF)
+  #include "ramps/pins_RAMPS.h"   // ATmega2560, ATmega1280 — env:mega2560 env:mega1280
+```
+
+The board constant (`BOARD_RAMPS_14_EFB`) and its numeric ID (`1020`) are defined in `Marlin/src/core/boards.h`. The `MB()` macro expands to a comparison against `MOTHERBOARD`, so a single pins file can cover multiple related variants.
+
+After the board-specific file is included, `pins_postprocess.h` runs to set defaults for any pins that the board file left undefined (assigning them `-1` to mark them as absent).
+
+## Directory layout
+
+Pin files are organized by platform family under `Marlin/src/pins/`:
+
+```
+Marlin/src/pins/
+├── esp32/          # ESP32 boards
+├── gd32f1/         # GD32 Cortex-M3 boards
+├── gd32f3/         # GD32 Cortex-M4 boards
+├── hc32f4/         # HC32 boards (Ender-2 Pro, Voxelab Aquila HC32)
+├── lpc1768/        # NXP LPC1768 boards
+├── lpc1769/        # NXP LPC1769 boards
+├── mega/           # ATmega boards (non-RAMPS)
+├── native/         # Linux native / simulator
+├── rambo/          # RAMBo and derivatives
+├── ramps/          # RAMPS 1.x and all RAMPS-based boards
+├── rp2040/         # Raspberry Pi RP2040 boards
+├── sam/            # Arduino Due / SAM3X8E boards
+├── samd/           # SAMD21 / SAMD51 boards
+├── sanguino/       # Sanguinololu, Melzi, and ATmega644/1284 boards
+├── stm32f0/        # STM32F0 boards
+├── stm32f1/        # STM32F1 boards (libmaple and STM32duino)
+├── stm32f4/        # STM32F4 boards
+├── stm32f7/        # STM32F7 boards
+├── stm32g0/        # STM32G0 boards
+├── stm32h7/        # STM32H7 boards
+├── teensy2/        # Teensy++ 2.0 / AT90USB boards
+├── teensy3/        # Teensy 3.x boards
+├── teensy4/        # Teensy 4.x boards
+├── pins.h          # Master include — selects the board pins file
+├── pins_postprocess.h  # Sets defaults for undefined pins
+├── pins_lcd.h      # LCD/display pin helpers
+├── pinsDebug.h     # M43 pin-reporting support
+└── sensitive_pins.h    # Pins that must not be toggled by user commands
+```
+
+## Anatomy of a pins file
+
+A pins file is a C++ header that defines preprocessor constants for each signal on the board. Here is an excerpt from `src/pins/ramps/pins_RAMPS.h`, which covers RAMPS 1.3 and 1.4 boards on ATmega2560/1280:
+
+```cpp
+// Marlin/src/pins/ramps/pins_RAMPS.h (abridged)
+
+#ifndef BOARD_INFO_NAME
+  #define BOARD_INFO_NAME "RAMPS 1.4"
+#endif
+
+//
+// Limit switches
+//
+#define X_MIN_PIN    3   // X-
+#define X_MAX_PIN    2   // X+
+#define Y_MIN_PIN   14   // Y-
+#define Y_MAX_PIN   15   // Y+
+#define Z_MIN_PIN   18   // Z-
+#define Z_MAX_PIN   19   // Z+
+
+//
+// Z probe
+//
+#define Z_MIN_PROBE_PIN  32
+
+//
+// Steppers
+//
+#define X_STEP_PIN   54  // A0
+#define X_DIR_PIN    55  // A1
+#define X_ENABLE_PIN 38
+
+#define Y_STEP_PIN   60
+#define Y_DIR_PIN    61
+#define Y_ENABLE_PIN 56  // A2
+```
+
+Pin numbers follow the digital I/O numbering used by `READ`/`WRITE` macros (from `fastio.h`). Analog input pins used for thermistors use the analog input number, which matches `analogRead()` on AVR.
+
+A pin value of `-1` means the feature is not available on that board. The `pins_postprocess.h` file fills in `-1` for every signal that the board file does not define, so every symbol is always available to the rest of the firmware.
+
+## Pin numbering
+
+<Tabs>
+  <Tab title="AVR (Arduino)">
+    AVR pin numbers match Arduino's digital pin numbering. Analog pins (A0–A15) are also reachable by their digital equivalents (54–69 on ATmega2560). The `FastIO` system in `src/HAL/AVR/fastio/` maps these numbers to port letters and bitmasks at compile time, giving direct register access without the overhead of `digitalWrite()`.
+  </Tab>
+  <Tab title="STM32">
+    STM32 pin numbers use the STM32duino format. Pins are encoded as `P<port><number>`, e.g., `PA9`, `PC13`. In `src/HAL/STM32/fastio.h` these resolve to a `pin_t` (`int32_t`) value used by the HAL's `READ`/`WRITE` macros.
+
+    The cross-reference file `src/HAL/STM32/pins_Xref.h` documents the mapping between STM32 port/pin names and their numeric values.
+  </Tab>
+  <Tab title="LPC1768">
+    LPC1768 pins are 32-bit values that encode the port and pin number. `src/HAL/LPC1768/fastio.h` defines `LPC_PORT` and `LPC_PIN` helpers. Boards like the BTT SKR V1.4 use `P1_04`, `P2_13`, etc.
+  </Tab>
+</Tabs>
+
+## Sensitive pins
+
+`src/pins/sensitive_pins.h` defines a list of pins that Marlin will refuse to toggle in response to user G-code commands (e.g., `M42`). This prevents accidentally driving a heater, stepper, or other safety-critical output from the serial terminal.
+
+## Adding a new board
+
+<Steps>
+  <Step title="Choose a board ID">
+    Add a new `#define BOARD_MY_BOARD <number>` entry in `Marlin/src/core/boards.h`, grouped by architecture. Pick an ID in the range reserved for your platform family.
+  </Step>
+  <Step title="Create the pins file">
+    Add a file `Marlin/src/pins/<family>/pins_MY_BOARD.h`. Define every relevant signal. Signals your board does not support should be left undefined — `pins_postprocess.h` will set them to `-1`.
+  </Step>
+  <Step title="Register the pins file">
+    Add an `elif MB(MY_BOARD)` branch to `Marlin/src/pins/pins.h` that includes your new file. Follow the comment convention (`// ATmegaXXXX   env:myenv`) to document the MCU and PlatformIO environment.
+  </Step>
+  <Step title="Add a PlatformIO environment">
+    Add a `[env:myenv]` section in the appropriate `Marlin/ini/*.ini` file specifying the platform, board, and build flags.
+  </Step>
+</Steps>
+
+<Tip>
+Use the `M43` G-code command to report the state of every pin on a running printer. `M43` lists all defined pins with their current logic level. `M43 P<pin> W` watches a specific pin and reports changes — useful for tracing endstop, probe, or sensor wiring problems. Pin reporting support is implemented per-platform in each HAL's `pinsDebug.h`.
+</Tip>
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Supported boards" icon="list" href="/hardware/supported-boards">
+    Full board listing with IDs grouped by platform.
+  </Card>
+  <Card title="Hardware Abstraction Layer" icon="microchip" href="/hardware/hal">
+    How the HAL translates pin numbers into hardware operations.
+  </Card>
+</CardGroup>

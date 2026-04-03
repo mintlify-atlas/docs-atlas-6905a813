@@ -1,0 +1,211 @@
+---
+title: "M500–M504 — EEPROM"
+description: "Save, load, and manage firmware settings in EEPROM"
+---
+
+The M500–M504 command group manages Marlin's persistent settings store. Marlin holds all runtime-configurable values (steps/mm, acceleration limits, temperature offsets, bed leveling data, and more) in RAM. EEPROM lets you persist those values across power cycles so you do not have to re-enter them every time the printer starts.
+
+<Note>
+  EEPROM support requires `EEPROM_SETTINGS` to be enabled in `Configuration.h`. On boards without physical EEPROM, Marlin can emulate it in flash memory or on an SD card using `FLASH_EEPROM_EMULATION` or `SDCARD_EEPROM_EMULATION`. Without `EEPROM_SETTINGS`, M500, M501, and M504 have no effect.
+</Note>
+
+<AccordionGroup>
+  <Accordion title="M500 — Save settings to EEPROM">
+
+M500 writes all current in-memory settings to EEPROM. After saving, the values will be automatically restored the next time the firmware boots (when `EEPROM_SETTINGS` and `EEPROM_BOOT_SILENT` are configured).
+
+### Syntax
+
+```gcode
+M500
+```
+
+M500 takes no parameters.
+
+### Example
+
+Calibrate steps/mm then immediately save:
+
+```gcode
+M92 X80 Y80 Z400 E427.8
+M500
+```
+
+  </Accordion>
+
+  <Accordion title="M501 — Load settings from EEPROM">
+
+M501 reads all settings from EEPROM and applies them to the current session, discarding any unsaved in-memory changes. Use this to restore the last saved state after experimenting with values you do not want to keep.
+
+### Syntax
+
+```gcode
+M501
+```
+
+M501 takes no parameters.
+
+### Example
+
+Discard in-session changes and restore the last saved configuration:
+
+```gcode
+M501
+```
+
+  </Accordion>
+
+  <Accordion title="M502 — Reset settings to firmware defaults">
+
+M502 resets all settings in RAM to the compiled-in defaults from `Configuration.h` and `Configuration_adv.h`. This is the equivalent of a "factory reset" for tunable parameters.
+
+<Warning>
+  M502 does **not** save the reset values to EEPROM. After M502, your EEPROM still contains the previous saved values. If you power-cycle without running M500, the firmware will reload those old EEPROM values on the next boot. Run `M500` immediately after `M502` if you want the defaults to be permanent.
+</Warning>
+
+### Syntax
+
+```gcode
+M502
+```
+
+M502 takes no parameters.
+
+### Example
+
+Reset to defaults and make it permanent:
+
+```gcode
+M502    ; Reset RAM to firmware defaults
+M500    ; Write defaults to EEPROM
+```
+
+  </Accordion>
+
+  <Accordion title="M503 — Report current settings">
+
+M503 prints all current in-memory settings to the serial console in a format that can be sent back to the printer as G-code. The output is not read from EEPROM — it reflects the current RAM state, which may differ from what is saved.
+
+M503 is available even when `EEPROM_SETTINGS` is disabled. It can be disabled by defining `DISABLE_M503` in `Configuration_adv.h`.
+
+### Syntax
+
+```gcode
+M503 [S<bool>]
+```
+
+### Parameters
+
+<ParamField path="S" type="boolean" default="1">
+  Include descriptive comment headers in the output. `S1` (default) includes headers; `S0` omits them for a compact machine-readable output.
+</ParamField>
+
+When `CONFIGURATION_EMBEDDING` is enabled, M503 also accepts:
+
+<ParamField path="C" type="flag">
+  Save the full Marlin configuration to the SD card as `mc.zip`.
+</ParamField>
+
+### Example
+
+Print all current settings with headers:
+
+```gcode
+M503
+```
+
+Print compact output with no headers:
+
+```gcode
+M503 S0
+```
+
+<Tip>
+  Run `M503` before making changes so you have a record of your working configuration. You can copy the output into a text file or print start macro and replay it later with `M501` or by pasting it directly into a terminal.
+</Tip>
+
+  </Accordion>
+
+  <Accordion title="M504 — Validate EEPROM contents">
+
+M504 checks that the data stored in EEPROM is valid and consistent with the current firmware version. Marlin stores a version identifier and checksum alongside settings; M504 verifies these match. If they do not (for example after a firmware update that changed the EEPROM layout), Marlin reports an error.
+
+<Note>
+  M504 requires `EEPROM_SETTINGS` to be enabled in `Configuration.h`.
+</Note>
+
+### Syntax
+
+```gcode
+M504
+```
+
+M504 takes no parameters in normal builds. In `MARLIN_DEV_MODE` builds it also accepts `R`/`W`/`V`/`T` for low-level EEPROM read/write operations (not intended for end users).
+
+### Example
+
+Check whether EEPROM contents are valid:
+
+```gcode
+M504
+; Response if OK:  "EEPROM OK"
+; Response if bad: error message with details
+```
+
+If M504 reports an error after a firmware update, reset to defaults and resave:
+
+```gcode
+M502    ; Reset to compiled-in defaults
+M500    ; Save clean defaults to EEPROM
+M504    ; Verify — should now report "EEPROM OK"
+```
+
+  </Accordion>
+</AccordionGroup>
+
+## Typical workflow
+
+Use this sequence when tuning your printer:
+
+<Steps>
+  <Step title="Check current settings">
+    Run `M503` to see what is currently active in memory and confirm your starting point.
+
+    ```gcode
+    M503
+    ```
+  </Step>
+  <Step title="Adjust values">
+    Use M92, M201, M203, M204, M205, or other commands to change settings in RAM.
+
+    ```gcode
+    M92 E427.8
+    M204 P1200 R3000 T1500
+    ```
+  </Step>
+  <Step title="Test the changes">
+    Run a test print or motion sequence. The new values are active immediately in RAM; no save is needed to test them.
+  </Step>
+  <Step title="Save to EEPROM">
+    Once satisfied, persist the values so they survive a power cycle.
+
+    ```gcode
+    M500
+    ```
+  </Step>
+  <Step title="Verify">
+    Confirm the save was successful by loading the settings back and reporting them.
+
+    ```gcode
+    M501
+    M503
+    ```
+  </Step>
+</Steps>
+
+## Related
+
+- [M92 — Steps per unit](/gcode/config/M92)
+- [M200–M205 — Motion settings](/gcode/config/M200-M205)
+- `EEPROM_SETTINGS` in `Configuration.h`
+- `EEPROM_AUTO_INIT` in `Configuration_adv.h` — Automatically reset EEPROM on version mismatch

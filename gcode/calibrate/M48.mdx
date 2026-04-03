@@ -1,0 +1,162 @@
+---
+title: "M48 — Probe repeatability test"
+description: "Test the repeatability of the Z probe by sampling the same point multiple times and reporting the standard deviation"
+---
+
+M48 probes a single XY position repeatedly and calculates the standard deviation of the Z readings. This tells you how consistent your probe is — a low standard deviation means the probe gives nearly the same reading every time it triggers, which is essential for reliable bed leveling and first-layer quality.
+
+<Note>
+  M48 requires `Z_MIN_PROBE_REPEATABILITY_TEST` to be enabled in `Configuration.h`. The machine must be homed before running this command.
+</Note>
+
+## Syntax
+
+```gcode
+M48 [C<bool>] [E] [L<legs>] [P<count>] [S] [V<level>] [X<pos>] [Y<pos>]
+```
+
+## Parameters
+
+<ParamField path="P" type="integer">
+  Number of probe samples to collect (4–50, default: 10). More samples give a more statistically robust result but take longer. 10–20 samples is typical for a routine check; use 30–50 for a rigorous evaluation.
+</ParamField>
+
+<ParamField path="X" type="float">
+  X position at which to probe (in mm). If omitted, the probe's current X position is used (i.e., the probe stays where it is in X).
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Y position at which to probe (in mm). If omitted, the probe's current Y position is used.
+</ParamField>
+
+<ParamField path="V" type="integer">
+  Verbosity level (0–4, default: 1).
+
+  | Value | Output |
+  |-------|--------|
+  | V0 | Silent — only the final standard deviation |
+  | V1 | Summary at the end |
+  | V2 | Each sample reading as it is collected |
+  | V3 | Each sample plus running mean, sigma, min, and max |
+  | V4 | Full debug including leg movement positions |
+</ParamField>
+
+<ParamField path="E" type="boolean">
+  Engage (fully deploy and stow) the probe for every individual sample. By default the probe is raised between samples but not fully stowed. Use this flag to simulate the full deploy/stow cycle that G29 uses, which gives a more realistic assessment of probe repeatability under actual leveling conditions.
+</ParamField>
+
+<ParamField path="L" type="integer">
+  Number of random legs (movements) to make around the test point before each probe sample (0–15). Each leg moves to a random angle and radius around the test position, then returns before probing. This simulates the mechanical stress of the probe arm moving around the bed and reveals any hysteresis in the probe mount or carriage. If `L` is given as 1, it is silently raised to 2 (the minimum meaningful value).
+</ParamField>
+
+<ParamField path="S" type="boolean">
+  Schizoid (star) movement pattern. When set, the inter-probe movements trace the points of a 5-pointed star rather than random angles. Implies `L7` if `L` is not explicitly given. This is a more aggressive stress test of probe repeatability under direction-reversing motion.
+</ParamField>
+
+<ParamField path="C" type="boolean">
+  Enable probe temperature compensation during the test (0 or 1, default: 1). Only relevant when `HAS_PTC` (probe temperature compensation) is enabled in firmware. Set `C0` to disable compensation and measure raw probe behavior.
+</ParamField>
+
+## What the test measures
+
+M48 collects `P` Z-height readings at the same XY position and computes:
+
+- **Mean** — average of all samples
+- **Sigma (standard deviation)** — how much individual readings deviate from the mean
+- **Min / Max** — the extreme readings observed
+- **Range** — the difference between max and min
+
+The most important number is the **standard deviation** reported at the end:
+
+```text
+Mean: 1.234567 Min: 1.231 Max: 1.237 Range: 0.006
+Standard Deviation: 0.001823
+```
+
+### Interpreting the result
+
+| Standard deviation | Assessment |
+|--------------------|------------|
+| < 0.01 mm | Excellent — probe is very consistent |
+| 0.01–0.05 mm | Good — suitable for most printing |
+| 0.05–0.10 mm | Marginal — investigate probe mounting and wiring |
+| > 0.10 mm | Poor — do not use this probe for bed leveling until the cause is found |
+
+A high standard deviation can indicate a loose probe mount, a bent pin, a dirty nozzle triggering an inductive probe, electrical noise on the probe signal line, or a probe that is mechanically worn.
+
+<Tip>
+  Run M48 before every bed leveling session when dialing in a new printer or after any mechanical change (nozzle swap, probe replacement, belt tension adjustment). A single bad probe reading during G29 can tilt the entire leveling mesh.
+</Tip>
+
+## Running the test
+
+<Steps>
+  <Step title="Home the printer">
+    M48 requires a homed machine. Send G28 first.
+
+    ```gcode
+    G28
+    ```
+  </Step>
+
+  <Step title="Move near the area you want to test">
+    By default M48 probes wherever the probe currently is. You can move to a specific position before running, or pass X/Y coordinates directly.
+  </Step>
+
+  <Step title="Run the repeatability test">
+    A basic 10-sample test at the current position:
+
+    ```gcode
+    M48
+    ```
+
+    A 20-sample test at bed center with detailed output:
+
+    ```gcode
+    M48 P20 X110 Y110 V3
+    ```
+  </Step>
+
+  <Step title="Review the standard deviation">
+    Check the printed `Standard Deviation` line. If it is above 0.05 mm, investigate your probe before continuing with bed leveling.
+  </Step>
+</Steps>
+
+## Examples
+
+Basic 10-sample test at the current probe position:
+
+```gcode
+M48
+```
+
+20 samples at a specific position with full per-sample output:
+
+```gcode
+M48 P20 X100 Y100 V3
+```
+
+40 samples, stow probe between each, show every reading:
+
+```gcode
+M48 P40 E V2
+```
+
+Stress test with 15 random legs between each of 10 samples:
+
+```gcode
+M48 P10 L15 V4
+```
+
+Star-pattern stress test (schizoid mode):
+
+```gcode
+M48 P10 S V4
+```
+
+## Related commands
+
+- G28 — Auto home
+- [G29 — Bed leveling](/gcode/bedlevel/G29)
+- M401 — Deploy the probe
+- M402 — Stow the probe

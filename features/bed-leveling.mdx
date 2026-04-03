@@ -1,0 +1,213 @@
+---
+title: "Bed leveling"
+description: "How automatic bed leveling works in Marlin, covering Bilinear ABL, Unified Bed Leveling, and Mesh Bed Leveling."
+---
+
+Bed leveling compensates for an uneven print surface by adjusting the Z axis in real time as the nozzle moves. Marlin probes a grid of points across the bed, stores the height values in a mesh, and applies corrections during printing so that the first layer stays at a consistent distance from the bed.
+
+## Leveling methods
+
+Marlin supports three main mesh-based leveling strategies. Enable exactly one in `Configuration.h`.
+
+<Tabs>
+  <Tab title="Bilinear ABL">
+    **`AUTO_BED_LEVELING_BILINEAR`** probes a rectangular grid of points and interpolates between them using bilinear math. It is the most common choice for printers with a dedicated probe (BLTouch, CR Touch, inductive sensor, etc.).
+
+    ```cpp
+    // Configuration.h
+    #define AUTO_BED_LEVELING_BILINEAR
+
+    // Set the number of grid points per dimension (3×3 default, up to 15×15).
+    #define GRID_MAX_POINTS_X 3
+    #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+    ```
+
+    Optional: subdivide the mesh using Catmull-Rom interpolation for smoother compensation between probe points.
+
+    ```cpp
+    //#define ABL_BILINEAR_SUBDIVISION
+    #if ENABLED(ABL_BILINEAR_SUBDIVISION)
+      #define BILINEAR_SUBDIVISIONS 3
+    #endif
+    ```
+
+    Optional: continue the implied tilt beyond the probed area instead of clamping to the nearest edge value.
+
+    ```cpp
+    //#define EXTRAPOLATE_BEYOND_GRID
+    ```
+
+    Running `G29` triggers the full automatic probing sequence. The printer homes first if needed, probes all grid points, and immediately enables leveling.
+  </Tab>
+
+  <Tab title="Unified Bed Leveling (UBL)">
+    **`AUTO_BED_LEVELING_UBL`** is a comprehensive system that combines automatic probing, manual adjustment, mesh editing, and mesh storage in EEPROM slots. It is well-suited to large or heavily warped beds.
+
+    ```cpp
+    // Configuration.h
+    #define AUTO_BED_LEVELING_UBL
+
+    #define MESH_INSET 1              // Inset from bed edges for the mesh boundary (mm)
+    #define GRID_MAX_POINTS_X 10      // Up to 15 points per axis
+    #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+
+    //#define UBL_HILBERT_CURVE       // Hilbert-curve probe ordering for less travel
+    #define UBL_MESH_EDIT_MOVES_Z    // Move nozzle to each point during manual edit
+    #define UBL_SAVE_ACTIVE_ON_M500  // Persist the active mesh slot when M500 is run
+    ```
+
+    UBL G29 accepts a `P` (phase) argument:
+
+    | Command | Action |
+    |---------|--------|
+    | `G29 P1` | Probe the entire mesh automatically |
+    | `G29 P2` | Manual probe for points not yet filled |
+    | `G29 P3` | Fill remaining invalid points by extrapolation |
+    | `G29 P4` | Fine-tune individual mesh points interactively |
+    | `G29 S0` | Report the current mesh |
+    | `G29 S1` | Save mesh to EEPROM slot 1 |
+    | `G29 L1` | Load mesh from EEPROM slot 1 |
+
+    UBL also supports a guided wizard via `G29 W` when `UBL_MESH_WIZARD` is enabled.
+  </Tab>
+
+  <Tab title="Mesh Bed Leveling (MBL)">
+    **`MESH_BED_LEVELING`** is designed for printers without an automatic probe. You manually move the nozzle to each grid point and confirm the height at each location using the LCD or host terminal.
+
+    ```cpp
+    // Configuration.h
+    #define MESH_BED_LEVELING
+
+    #define MESH_INSET 10          // Inset from bed edges (mm)
+    #define GRID_MAX_POINTS_X 3
+    #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+    ```
+
+    The MBL G29 sub-commands use the `S` argument:
+
+    | Command | Action |
+    |---------|--------|
+    | `G29 S0` | Report the current mesh |
+    | `G29 S1` | Start a new manual mesh |
+    | `G29 S2` | Move to the next mesh point |
+    | `G29 S3 Xn Yn Zn` | Set a specific mesh point value |
+    | `G29 S4 Zn` | Set the Z offset for the mesh |
+    | `G29 S5` | Reset the mesh to all zeros |
+
+    Add `LCD_BED_LEVELING` to give the LCD controller a guided step-by-step probing menu.
+  </Tab>
+</Tabs>
+
+## Leveling fade height
+
+When `ENABLE_LEVELING_FADE_HEIGHT` is enabled (on by default for mesh methods), Marlin gradually reduces the Z correction over a configurable height. Above that height, motion is flat relative to the machine's XY plane.
+
+```cpp
+// Configuration.h
+#define ENABLE_LEVELING_FADE_HEIGHT
+#if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+  #define DEFAULT_LEVELING_FADE_HEIGHT 10.0 // (mm)
+#endif
+```
+
+Set the fade height at runtime with `M420 Z<height>`. Setting it to `0` disables fading (full correction at all heights).
+
+## Restoring leveling after homing
+
+By default, `G28` disables bed leveling. Use one of these options to change that behavior:
+
+```cpp
+// Configuration.h
+
+// Restore the leveling state that was active before G28
+//#define RESTORE_LEVELING_AFTER_G28
+
+// Always enable leveling after G28 completes
+//#define ENABLE_LEVELING_AFTER_G28
+```
+
+## G-code reference
+
+| G-code | Description |
+|--------|-------------|
+| `G28` | Home all axes (disables leveling by default) |
+| `G29` | Run bed leveling (behavior depends on the active method) |
+| `M420 S1` | Enable bed leveling compensation |
+| `M420 S0` | Disable bed leveling compensation |
+| `M420 Z<h>` | Set the leveling fade height |
+| `M421 X<x> Y<y> Z<z>` | Set a mesh point value directly |
+| `M500` | Save settings (including the mesh) to EEPROM |
+| `M501` | Load settings from EEPROM |
+| `M502` | Reset to firmware defaults (clears the mesh) |
+
+## First-time bed leveling procedure
+
+<Steps>
+  <Step title="Home the printer">
+    Send `G28` to home all axes. This establishes the coordinate origin and is required before probing.
+
+    ```gcode
+    G28
+    ```
+  </Step>
+
+  <Step title="Run G29 to probe the bed">
+    Send `G29` to start the leveling sequence. For Bilinear ABL and UBL `P1`, the printer probes all grid points automatically. For MBL, follow the prompts on the LCD or host console to position the nozzle at each point manually.
+
+    ```gcode
+    G29
+    ```
+  </Step>
+
+  <Step title="Verify the mesh">
+    After probing, send `M420 V1` to print the mesh map to the serial console and confirm the values look reasonable. Large outliers may indicate a dirty probe tip or a collision during probing.
+
+    ```gcode
+    M420 V1
+    ```
+  </Step>
+
+  <Step title="Enable leveling compensation">
+    Leveling is enabled automatically after `G29`. To enable it manually (for example, after loading a saved mesh):
+
+    ```gcode
+    M420 S1
+    ```
+  </Step>
+
+  <Step title="Save the mesh to EEPROM">
+    Persist the mesh so you do not need to re-probe on every boot. For UBL, `UBL_SAVE_ACTIVE_ON_M500` must be enabled for `M500` to save the active mesh slot.
+
+    ```gcode
+    M500
+    ```
+  </Step>
+
+  <Step title="Add leveling to your start G-code">
+    In your slicer's start G-code, load the saved mesh and enable compensation before the print begins:
+
+    ```gcode
+    G28        ; Home all axes
+    M420 S1    ; Enable saved mesh
+    ; or re-probe every time:
+    ; G29
+    ```
+  </Step>
+</Steps>
+
+## Mesh validation
+
+Enable `G26_MESH_VALIDATION` to print a test pattern directly on top of the probed mesh. The pattern highlights low and high spots so you can fine-tune individual mesh points with `M421`.
+
+```cpp
+// Configuration.h
+//#define G26_MESH_VALIDATION
+#if ENABLED(G26_MESH_VALIDATION)
+  #define MESH_TEST_NOZZLE_SIZE    0.4  // (mm)
+  #define MESH_TEST_LAYER_HEIGHT   0.2  // (mm)
+  #define MESH_TEST_HOTEND_TEMP  205    // (°C)
+  #define MESH_TEST_BED_TEMP      60    // (°C)
+#endif
+```
+
+Run the validation pattern with `G26` after completing a probing session.

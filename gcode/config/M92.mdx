@@ -1,0 +1,157 @@
+---
+title: "M92 — Steps per unit"
+description: "Set the number of steps per mm for each axis and extruder"
+---
+
+M92 sets the steps-per-unit value for each axis and extruder. This value tells the firmware how many stepper motor steps are required to move one millimeter (or one degree for rotary axes). Getting these values right is the foundation of dimensional accuracy — an incorrect steps/mm value causes every move to be over- or under-shot by a fixed percentage, which compounds across layers and features.
+
+<Note>
+  M92 requires `EDITABLE_STEPS_PER_UNIT` to be enabled in `Configuration.h`. Without it, steps-per-unit values are fixed at compile time from `DEFAULT_AXIS_STEPS_PER_UNIT`.
+</Note>
+
+## Syntax
+
+```gcode
+M92 [T<index>] [X<steps>] [Y<steps>] [Z<steps>] [E<steps>]
+```
+
+Send `M92` with no arguments to report the current values for all axes.
+
+## Parameters
+
+<ParamField path="T" type="int">
+  Extruder index to target when setting `E`. If omitted, the currently active extruder is used. Only relevant when `DISTINCT_E_FACTORS` is enabled.
+</ParamField>
+
+<ParamField path="X" type="float">
+  Steps per mm for the X axis.
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Steps per mm for the Y axis.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Steps per mm for the Z axis.
+</ParamField>
+
+<ParamField path="E" type="float">
+  Steps per mm for the active extruder. When `DISTINCT_E_FACTORS` is enabled, use `T` to target a specific extruder. If the new value is less than 20, the firmware automatically scales the extruder's max feedrate, max acceleration, and E jerk proportionally to keep motion behaviour consistent.
+</ParamField>
+
+## Calculating the correct value
+
+### X and Y axes (belt-driven)
+
+For a belt-driven axis:
+
+```
+steps/mm = (motor_steps_per_rev × microstepping) / (belt_pitch_mm × pulley_teeth)
+```
+
+For example, a common NEMA 17 motor (200 steps/rev) with 16× microstepping, a 2 mm GT2 belt, and a 20-tooth pulley:
+
+```
+steps/mm = (200 × 16) / (2 × 20) = 3200 / 40 = 80
+```
+
+### Z axis (leadscrew-driven)
+
+For a leadscrew axis:
+
+```
+steps/mm = (motor_steps_per_rev × microstepping) / lead_mm
+```
+
+With a T8 leadscrew (8 mm lead) and 16× microstepping:
+
+```
+steps/mm = (200 × 16) / 8 = 400
+```
+
+### Extruder
+
+Extruder steps/mm depends on the extruder style (direct drive vs. Bowden, gear ratio) and must be measured empirically. A common starting point for a direct-drive MK8 extruder with 16× microstepping is around 93–100 steps/mm. Bowden extruders with a geared drive are often 400–500 steps/mm.
+
+## Calibration workflow
+
+<Steps>
+  <Step title="Print or record the current values">
+    Send `M92` with no arguments. The firmware responds with the current steps/mm for all axes, for example:
+
+    ```gcode
+    M92
+    ; Response: M92 X80.00 Y80.00 Z400.00 E415.00
+    ```
+  </Step>
+  <Step title="Mark and measure">
+    For the extruder: mark the filament 100 mm above the extruder entry point, command the printer to extrude 100 mm (`G1 E100 F100` in relative mode), then measure how much filament actually moved. Note the actual distance.
+  </Step>
+  <Step title="Calculate the corrected value">
+    ```
+    new_steps = (current_steps × requested_distance) / actual_distance
+    ```
+
+    If you commanded 100 mm and 97 mm moved, and your current E steps/mm is 415:
+
+    ```
+    new_steps = (415 × 100) / 97 ≈ 427.8
+    ```
+  </Step>
+  <Step title="Apply the new value">
+    ```gcode
+    M92 E427.8
+    ```
+  </Step>
+  <Step title="Save to EEPROM">
+    ```gcode
+    M500
+    ```
+  </Step>
+  <Step title="Verify">
+    Repeat the measurement to confirm the result. Iterate as needed until the measured distance matches the commanded distance within 0.5%.
+  </Step>
+</Steps>
+
+## Examples
+
+Set standard steps/mm for a typical Cartesian printer:
+
+```gcode
+M92 X80 Y80 Z400 E415
+```
+
+Report the current values:
+
+```gcode
+M92
+```
+
+Set steps/mm for extruder 1 only (requires `DISTINCT_E_FACTORS`):
+
+```gcode
+M92 T1 E430
+```
+
+## Usage notes
+
+**H and L parameters (MAGIC_NUMBERS_GCODE)**
+
+When `MAGIC_NUMBERS_GCODE` is enabled, you can pass `H<microsteps>` and `L<layer_height>` to M92. The firmware calculates and reports ideal layer heights that land on full-step boundaries for the Z axis, reducing Z-banding artifacts.
+
+```gcode
+M92 H16 L0.2    ; Show nearest good layer heights to 0.2mm with 16x microstepping
+```
+
+**Effect on other extruder settings**
+
+When you set a very low E steps/mm value (below 20), Marlin automatically scales the extruder's max feedrate, max acceleration, and jerk/junction deviation by the same ratio. This prevents accidentally losing all extruder motion limits after a unit-system change.
+
+<Tip>
+  Always run `M500` after calibrating steps/mm to save the values to EEPROM. Without saving, a power cycle reverts to the compiled-in defaults from `DEFAULT_AXIS_STEPS_PER_UNIT` in `Configuration.h`.
+</Tip>
+
+## Related
+
+- [M500–M504 — EEPROM](/gcode/eeprom/M500-M504) — Save settings to EEPROM
+- `DEFAULT_AXIS_STEPS_PER_UNIT` in `Configuration.h` — Compile-time defaults

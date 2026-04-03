@@ -1,0 +1,118 @@
+---
+title: "M140/M190 — Bed temperature"
+description: "Set the heated bed target temperature, with or without waiting for the temperature to be reached."
+---
+
+Use **M140** to set a bed target temperature and return immediately so the printer can continue with other commands while the bed heats. Use **M190** to set the target and block until the bed reaches that temperature before continuing.
+
+Requires `HAS_HEATED_BED` to be enabled in firmware. If your printer does not have a heated bed, these commands have no effect.
+
+## M140 — Set bed temperature
+
+Sets the bed target temperature and returns immediately. The bed heats (or cools) in the background while subsequent commands execute.
+
+### Syntax
+
+```gcode
+M140 [S<temp>] [I<preset>]
+```
+
+### Parameters
+
+<ParamField path="S" type="float">
+  Target bed temperature in degrees Celsius. Pass `S0` to turn off the bed heater.
+</ParamField>
+
+<ParamField path="I" type="int">
+  Material preset index. When presets are defined in firmware, `I` selects a preset's bed temperature instead of using `S`. Requires `HAS_PREHEAT` to be enabled.
+</ParamField>
+
+### Usage notes
+
+- M140 returns immediately; it does not wait for the bed to reach temperature.
+- If `PRINTJOB_TIMER_AUTOSTART` is enabled, setting the bed temperature to 0 with M140 stops the print job timer.
+- The LCD status message is updated automatically to show whether the bed is heating or cooling.
+
+### Examples
+
+```gcode
+M140 S60        ; Start heating bed to 60°C, return immediately
+M140 S0         ; Turn off bed heater
+M140 S110 I1    ; Set bed to the temperature from preset 1
+```
+
+---
+
+## M190 — Set bed temperature and wait
+
+Sets the bed target temperature and blocks execution until the bed reaches that temperature (within tolerance). No further G-code commands execute until the condition is met.
+
+### Syntax
+
+```gcode
+M190 [S<temp>] [R<temp>] [I<preset>]
+```
+
+With `BED_ANNEALING_GCODE` enabled:
+
+```gcode
+M190 R<temp> T<seconds>
+```
+
+### Parameters
+
+<ParamField path="S" type="float">
+  Target bed temperature in degrees Celsius. With `S`, the firmware waits only when **heating up** — it does not wait if the bed is already above the target temperature.
+</ParamField>
+
+<ParamField path="R" type="float">
+  Target bed temperature in degrees Celsius. With `R`, the firmware waits for the bed to reach the target whether it is heating **or cooling**. Useful when you need the bed to drop to a specific temperature before the next step.
+</ParamField>
+
+<ParamField path="I" type="int">
+  Material preset index. Selects a preset's bed temperature. Requires `HAS_PREHEAT` to be enabled in firmware.
+</ParamField>
+
+<ParamField path="T" type="int">
+  Cooldown duration in seconds. Only available when `BED_ANNEALING_GCODE` is enabled, and only valid with `R`. Causes the bed to cool gradually from its current temperature to the target over the specified duration rather than as fast as possible.
+</ParamField>
+
+### Usage notes
+
+- `S` waits only when heating. If the bed is already at or above the target, execution continues without waiting.
+- `R` waits for both heating and cooling — useful for controlled cool-down steps.
+- If `PRINTJOB_TIMER_AUTOSTART` is enabled, M190 starts the print job timer.
+
+<Note>
+  Many bed-leveling workflows (such as mesh bed leveling and automatic tramming) require the bed to be at printing temperature before probing, because the bed surface expands when heated. Always heat the bed to print temperature before running bed leveling routines.
+</Note>
+
+### Examples
+
+```gcode
+M190 S65            ; Wait until bed reaches 65°C
+M190 R40            ; Wait until bed cools down to 40°C
+```
+
+A typical start sequence that heats bed and hotend in parallel:
+
+```gcode
+M140 S60            ; Start bed heating (non-blocking)
+M104 S200           ; Start hotend heating (non-blocking)
+M190 S60            ; Wait for bed to reach 60°C
+M109 S200           ; Wait for hotend to reach 200°C
+G28                 ; Home all axes
+```
+
+With `BED_ANNEALING_GCODE`, you can slow-cool the bed during an annealing phase at the end of a print:
+
+```gcode
+M190 R70 T600       ; Cool the bed to 70°C over 10 minutes
+```
+
+## Related commands
+
+- [M104/M109](/gcode/temperature/M104-M109) — Set hotend temperature
+- M105 — Report current temperatures
+- M304 — Set bed PID values (P, I, D)
+- [M303](/gcode/temperature/M303) — PID autotune

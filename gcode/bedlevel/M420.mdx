@@ -1,0 +1,151 @@
+---
+title: "M420 — Bed leveling state"
+description: "Enable or disable bed leveling compensation, set Z fade height, and manage mesh data"
+---
+
+M420 controls whether bed leveling compensation is active. Use it to turn leveling on or off, inspect the current mesh, set a Z fade height, load a UBL mesh from EEPROM, and center the mesh values.
+
+<Tip>
+  Add `M420 S1` near the start of your printer's start G-code (after `G28` and `G29`, or in place of `G29` when a saved mesh already exists) to re-enable leveling on every print without re-probing the bed.
+</Tip>
+
+## Syntax
+
+```gcode
+M420 [S<bool>] [V] [Z<height>] [L<slot>] [T<type>] [C[<value>]]
+```
+
+## Parameters
+
+<ParamField path="S" type="boolean (0 or 1)">
+  Enable (`S1`) or disable (`S0`) bed leveling compensation. When `S1` is sent and no valid mesh is loaded, the command reports an error.
+</ParamField>
+
+<ParamField path="V" type="flag">
+  Verbose — print the current leveling data to the serial port.
+
+  - For **Bilinear ABL** and **MBL**: prints the full grid of Z values.
+  - For **UBL**: prints the mesh map (format depends on `T`).
+  - For **Linear/3-Point ABL**: prints the bed level correction matrix.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Set the Z fade height in mm. Requires `ENABLE_LEVELING_FADE_HEIGHT` in firmware configuration.
+
+  When a fade height is set, Marlin gradually reduces the leveling compensation as Z increases, reaching zero correction at the specified height. This prevents the compensation from being applied unnecessarily on tall prints where bed variation has no impact. Set `Z0` to disable fade and apply full compensation at all heights.
+</ParamField>
+
+<ParamField path="L" type="integer">
+  Load a UBL mesh from the specified EEPROM storage slot. Only available with `AUTO_BED_LEVELING_UBL`. If no value is given, the last activated slot is used. Loading a mesh automatically displays it (equivalent to also sending `V`).
+</ParamField>
+
+<ParamField path="T" type="integer (0–2)">
+  Mesh display format, used together with `L` or `V` in UBL mode:
+
+  | Value | Format |
+  |-------|--------|
+  | `T0`  | Human-readable grid (default) |
+  | `T1`  | CSV — suitable for pasting into a spreadsheet |
+  | `T2`  | Compact LCD-style display |
+  | `T4`  | Compact format |
+</ParamField>
+
+<ParamField path="C" type="float">
+  Center the mesh by subtracting the midrange value (or mean, depending on build options) from every point, with an optional additional offset. For UBL this calls `adjust_mesh_to_mean`. For other mesh leveling systems, the mesh is shifted so that it is centered around zero. Useful after building a mesh to normalize it before saving.
+</ParamField>
+
+## Usage notes
+
+**Enabling leveling in start G-code**
+
+If you probe the bed on every print:
+
+```gcode
+G28        ; Home all axes
+G29        ; Probe and build mesh
+M420 S1    ; Enable leveling (G29 may do this automatically)
+M500       ; Save to EEPROM (optional)
+```
+
+If you have a saved mesh and want to reuse it without re-probing:
+
+```gcode
+G28        ; Home all axes
+M420 S1    ; Re-enable the saved mesh
+```
+
+For UBL with a named slot:
+
+```gcode
+G28
+M420 L0 S1   ; Load slot 0 and enable leveling
+```
+
+**Z fade height**
+
+Z fade gradually fades out the bed correction over height so that it reaches zero at the specified value. This is appropriate for most prints — bed imperfections only affect the first few layers. A value of `5` to `10` mm is typical.
+
+```gcode
+M420 S1 Z10   ; Enable leveling with 10 mm fade height
+```
+
+To check the current fade height, send `M420` with no parameters — the firmware reports the current leveling state and fade height.
+
+**Centering the mesh**
+
+If your mesh has a non-zero mean (the overall Z compensation is biased up or down), you can normalize it:
+
+```gcode
+M420 C    ; Center the mesh around zero
+M500      ; Save the adjusted mesh
+```
+
+This is especially useful after manual adjustments or when combining UBL with `G29 P5 C`.
+
+## Examples
+
+Enable leveling:
+
+```gcode
+M420 S1
+```
+
+Disable leveling:
+
+```gcode
+M420 S0
+```
+
+Print the current mesh to the serial console:
+
+```gcode
+M420 V
+```
+
+Enable leveling with a 5 mm fade height:
+
+```gcode
+M420 S1 Z5
+```
+
+Load UBL mesh from slot 2 and display it in CSV format:
+
+```gcode
+M420 L2 T1
+```
+
+Center the mesh and save:
+
+```gcode
+M420 C
+M500
+```
+
+## Related commands
+
+- [G29 — Bed leveling](/gcode/bedlevel/G29) — probe the bed and build the leveling mesh
+- M421 — Edit a single mesh point by index
+- G28 — Home all axes (required before leveling)
+- M500 — Save settings to EEPROM
+- M501 — Load settings from EEPROM
+- M502 — Reset settings to firmware defaults

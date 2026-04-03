@@ -1,0 +1,212 @@
+---
+title: "Basic settings"
+description: "How to configure the board, serial port, extruder count, machine name, and printer dimensions in Configuration.h."
+---
+
+The settings described on this page live in the `// @section machine`, `// @section serial`, `// @section extruder`, and `// @section geometry` sections of `Configuration.h`. They are the first things you should set before touching anything else.
+
+## Board selection
+
+`MOTHERBOARD` tells Marlin which control board you are using. The value must be one of the constants defined in `Marlin/src/core/boards.h`.
+
+```cpp
+// @section machine
+
+// Choose the name from boards.h that matches your setup
+#ifndef MOTHERBOARD
+  #define MOTHERBOARD BOARD_RAMPS_14_EFB
+#endif
+```
+
+The default is `BOARD_RAMPS_14_EFB` (RAMPS 1.4 with one extruder, one fan, and a heated bed). Common values include:
+
+| Constant | Board |
+|---|---|
+| `BOARD_RAMPS_14_EFB` | RAMPS 1.4 (E + Fan + Bed) |
+| `BOARD_CREALITY_V4` | Creality 4.x |
+| `BOARD_BTT_SKR_V1_4` | BigTreeTech SKR V1.4 |
+| `BOARD_BTT_SKR_MINI_E3_V3_0` | BTT SKR Mini E3 V3 |
+| `BOARD_MKS_ROBIN_NANO_V3` | MKS Robin Nano V3 |
+
+Search `boards.h` for the full list.
+
+## Build author string
+
+`STRING_CONFIG_H_AUTHOR` is printed to the host during boot and in the `M115` response. It identifies who compiled this particular firmware build.
+
+```cpp
+// @section info
+
+// Author info of this build printed to the host during boot and M115
+#define STRING_CONFIG_H_AUTHOR "(MarlinFirmware)" // Original author or contributor.
+```
+
+Set this to your name or your machine's name so you can identify custom builds.
+
+## Serial port and baud rate
+
+These settings control how Marlin communicates with a host (OctoPrint, Pronterface, a display board, etc.).
+
+```cpp
+// @section serial
+
+/**
+ * Select the serial port on the board to use for communication with the host.
+ * Serial port -1 is the USB emulated serial port, if available.
+ * :[-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+ */
+#define SERIAL_PORT 0
+
+/**
+ * Serial Port Baud Rate
+ * 250000 works in most cases, but you might try a lower speed if
+ * you commonly experience drop-outs during host printing.
+ * :[2400, 9600, 19200, 38400, 57600, 115200, 250000, 500000, 1000000]
+ */
+#define BAUDRATE 250000
+```
+
+`SERIAL_PORT 0` selects the first hardware UART. Use `-1` for a native USB port (common on boards with an ARM processor and built-in USB). `BAUDRATE 250000` is the Marlin default and works reliably with most hosts.
+
+<Tip>
+If you experience frequent communication drops during prints, try lowering `BAUDRATE` to `115200`.
+</Tip>
+
+A second serial port (`SERIAL_PORT_2`) can be enabled for a secondary host, a Raspberry Pi running OctoPrint, or an attached display:
+
+```cpp
+//#define SERIAL_PORT_2 -1
+//#define BAUDRATE_2 250000
+```
+
+## Machine name
+
+The machine name appears on the LCD "Ready" screen and in `M115` responses.
+
+```cpp
+// Name displayed in the LCD "Ready" message and Info menu
+//#define CUSTOM_MACHINE_NAME "3D Printer"
+//#define CONFIGURABLE_MACHINE_NAME // Add G-code M550 to set/report the machine name
+```
+
+Uncomment `CUSTOM_MACHINE_NAME` and replace `"3D Printer"` with your printer's name. Enable `CONFIGURABLE_MACHINE_NAME` if you want to change the name at runtime via `M550`.
+
+## Extruder count
+
+`EXTRUDERS` sets the number of extruder drives (stepper motors for filament). Most single-extruder printers use `1`.
+
+```cpp
+// @section extruder
+
+// This defines the number of extruders
+// :[0, 1, 2, 3, 4, 5, 6, 7, 8]
+#define EXTRUDERS 1
+
+// Generally expected filament diameter (1.75, 2.85, 3.0, ...).
+#define DEFAULT_NOMINAL_FILAMENT_DIA 1.75
+```
+
+<Note>
+`EXTRUDERS` counts stepper motor drives, not nozzles. A dual-drive single-nozzle system (like Cyclops or a Diamond hotend) uses `SINGLENOZZLE` or `MIXING_EXTRUDER` with `EXTRUDERS 1` or `EXTRUDERS 2`.
+</Note>
+
+`DEFAULT_NOMINAL_FILAMENT_DIA` is used for volumetric extrusion calculations and filament width sensor corrections. Set it to match your filament: `1.75` for standard 1.75 mm or `2.85` for 3 mm filament.
+
+## Temperature sensor types
+
+`TEMP_SENSOR_0` through `TEMP_SENSOR_7` select the thermistor or sensor type for each hotend. `TEMP_SENSOR_BED` does the same for the heated bed. The numeric codes map to specific thermistor models and resistance tables built into Marlin.
+
+```cpp
+#define TEMP_SENSOR_0 1
+#define TEMP_SENSOR_1 0
+#define TEMP_SENSOR_2 0
+#define TEMP_SENSOR_3 0
+#define TEMP_SENSOR_4 0
+#define TEMP_SENSOR_5 0
+#define TEMP_SENSOR_6 0
+#define TEMP_SENSOR_7 0
+#define TEMP_SENSOR_BED 1
+#define TEMP_SENSOR_PROBE 0
+#define TEMP_SENSOR_CHAMBER 0
+```
+
+A value of `0` means "not used." The most common codes are:
+
+| Code | Sensor |
+|---|---|
+| `1` | 100kΩ EPCOS thermistor (4.7kΩ pullup) — default for most hot ends |
+| `5` | 100kΩ ATC Semitec 104GT-2 — used in E3D, J-Head, ParCan |
+| `11` | 100kΩ, beta 3950, 1% — Wanhao i3, Keenovo silicone mats |
+| `147` | Pt100 with 4.7kΩ pullup |
+| `1047` | Pt1000 with 4.7kΩ pullup (E3D) |
+| `-2` | MAX6675 thermocouple (SPI) |
+| `-3` | MAX31855 thermocouple (SPI) |
+| `-5` | MAX31865 with Pt100/Pt1000 (SPI) |
+| `1000` | Custom thermistor — parameters set in `Configuration_adv.h` |
+| `998` | Dummy — always reads 25°C (testing only) |
+
+Check the full comment block starting at line 473 of `Configuration.h` for the complete list.
+
+## PID values
+
+When `PIDTEMP` is enabled (the default), Marlin uses a PID control loop for the hotend heater. The three constants control how aggressively the firmware responds to temperature errors.
+
+```cpp
+// @section hotend temp
+
+#define PIDTEMP           // See the PID Tuning Guide at https://reprap.org/wiki/PID_Tuning
+
+#define PID_MAX  255      // Limit hotend current while PID is active; 255=full current
+#define PID_K1     0.95   // Smoothing factor within any PID loop
+
+#if ENABLED(PIDTEMP)
+  #define DEFAULT_KP  22.20
+  #define DEFAULT_KI   1.08
+  #define DEFAULT_KD 114.00
+#endif
+```
+
+| Define | Purpose |
+|---|---|
+| `DEFAULT_KP` | Proportional gain. Higher values give faster response but can cause overshoot. |
+| `DEFAULT_KI` | Integral gain. Corrects steady-state error. |
+| `DEFAULT_KD` | Derivative gain. Damps oscillation. |
+
+<Warning>
+The default PID values are for a generic hotend and are unlikely to be optimal for your hardware. Run `M303 E0 S200 C8` to auto-tune the hotend PID, then save the result with `M500`.
+</Warning>
+
+For the heated bed, uncomment `PIDTEMPBED` in the `// @section bed temp` block and configure `DEFAULT_BED_KP`, `DEFAULT_BED_KI`, and `DEFAULT_BED_KD`. Without `PIDTEMPBED`, the bed uses bang-bang control.
+
+## Printer dimensions
+
+These defines describe your printer's physical build volume.
+
+```cpp
+// @section geometry
+
+// The size of the printable area
+#define X_BED_SIZE 200
+#define Y_BED_SIZE 200
+
+// Travel limits (mm) after homing, corresponding to endstop positions.
+#define X_MIN_POS 0
+#define Y_MIN_POS 0
+#define Z_MIN_POS 0
+#define X_MAX_POS X_BED_SIZE
+#define Y_MAX_POS Y_BED_SIZE
+#define Z_MAX_POS 200
+```
+
+| Define | Description |
+|---|---|
+| `X_BED_SIZE` | Width of the printable area in mm |
+| `Y_BED_SIZE` | Depth of the printable area in mm |
+| `Z_MAX_POS` | Maximum Z travel in mm (your actual build height) |
+| `X_MIN_POS` / `Y_MIN_POS` | Software endstop lower bounds; normally `0` for Cartesian printers |
+
+`X_MAX_POS` and `Y_MAX_POS` default to `X_BED_SIZE` and `Y_BED_SIZE`. If your nozzle can travel beyond the bed edge (common when you have a probe mounted to the side), you can increase `X_MAX_POS` beyond `X_BED_SIZE`.
+
+<Note>
+For delta printers the geometry section is replaced by the `// @section delta` block which uses `DELTA_PRINTABLE_RADIUS` and `DELTA_HEIGHT` instead.
+</Note>

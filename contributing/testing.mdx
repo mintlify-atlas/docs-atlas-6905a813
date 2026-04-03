@@ -1,0 +1,224 @@
+---
+title: "Testing"
+description: "How to run build tests and unit tests for Marlin firmware before submitting a pull request."
+---
+
+Marlin uses two complementary testing systems: build tests that verify configurations compile correctly, and unit tests that validate firmware logic without requiring real hardware.
+
+<Tip>
+  Always run the relevant tests locally before pushing. Any build test you add to `buildroot/tests/` will run automatically on GitHub CI when you push to your PR, but catching failures locally saves iteration time.
+</Tip>
+
+## Types of tests
+
+**Build tests** (`buildroot/tests/`) compile Marlin with specific configurations and feature combinations to catch syntax errors and configuration conflicts. There is one test script per target platform (e.g. `mega2560`, `STM32F103RE`, `linux_native`). Each script calls `exec_test` with a sequence of `opt_enable`, `opt_disable`, and `opt_set` commands that modify `Configuration.h` before compiling.
+
+**Unit tests** (`Marlin/tests/`) test Marlin logic directly on the development machine via the `linux_native_test` PlatformIO environment. Unit tests validate discrete pieces of firmware code — such as macros, types, and G-code parsing — without requiring hardware. Tests are organized under `Marlin/tests/core/`, `Marlin/tests/feature/`, and `Marlin/tests/gcode/`.
+
+Unit tests use `MARLIN_TEST` and `TEST_ASSERT_*` macros from `test/unit_tests.h`:
+
+```cpp
+MARLIN_TEST(macros_bitwise_8, SET_BIT_TO) {
+  uint8_t n = 0x00;
+  SET_BIT_TO(n, 0, true);
+  TEST_ASSERT_EQUAL(0x01, n);
+  SET_BIT_TO(n, 0, false);
+  TEST_ASSERT_EQUAL(0x00, n);
+}
+```
+
+The `test/` folder contains INI configuration files (e.g. `001-default.ini`, `002-extruders_1_runout.ini`) that define the set of configurations each unit test suite is compiled and run against.
+
+## Setting up
+
+<Steps>
+  <Step title="Install PlatformIO">
+    Build tests and unit tests both require PlatformIO. Install it as a [VS Code extension](https://platformio.org/install/ide?install=vscode) or via pip:
+
+    ```bash
+    pip install platformio
+    ```
+  </Step>
+  <Step title="Install Python 3">
+    The Makefile requires Python 3 on your PATH. Verify your installation:
+
+    ```bash
+    python3 --version
+    ```
+
+    Build tests also require the `pyyaml` package to enumerate test targets:
+
+    ```bash
+    python3 -m pip install pyyaml
+    ```
+  </Step>
+  <Step title="Clone the repository">
+    Clone Marlin and check out `bugfix-2.1.x`:
+
+    ```bash
+    git clone https://github.com/MarlinFirmware/Marlin.git
+    cd Marlin
+    git checkout bugfix-2.1.x
+    ```
+  </Step>
+</Steps>
+
+## Running build tests
+
+Build tests compile Marlin for various boards and feature combinations to catch configuration-level errors.
+
+<Tabs>
+  <Tab title="Make (local)">
+    Run all build tests locally:
+
+    ```bash
+    make tests-all-local
+    ```
+
+    Run a single test target by name (the test file names in `buildroot/tests/` are the valid targets):
+
+    ```bash
+    make tests-single-local TEST_TARGET=mega2560
+    ```
+
+    Limit which sub-tests within a target file run using `ONLY_TEST`:
+
+    ```bash
+    make tests-single-local TEST_TARGET=mega2560 ONLY_TEST=2
+    ```
+
+    To see full PlatformIO output, set `VERBOSE_PLATFORMIO`:
+
+    ```bash
+    make tests-single-local TEST_TARGET=mega2560 VERBOSE_PLATFORMIO=1
+    ```
+  </Tab>
+  <Tab title="Docker">
+    If you don't want to install PlatformIO locally, use the Docker-based runner. Build the image first (only needed once):
+
+    ```bash
+    make setup-local-docker
+    ```
+
+    Then run all tests inside Docker:
+
+    ```bash
+    make tests-all-local-docker
+    ```
+
+    Run a single test in Docker:
+
+    ```bash
+    make tests-single-local-docker TEST_TARGET=mega2560
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  On macOS, `linux_native` tests are automatically skipped when running `tests-all-local`, as that target requires a Linux environment.
+</Note>
+
+## Running unit tests
+
+Unit tests run on the host machine using the `linux_native_test` PlatformIO environment.
+
+<Tabs>
+  <Tab title="PlatformIO">
+    Run all unit test suites:
+
+    ```bash
+    platformio run -t test-marlin -e linux_native_test
+    ```
+
+    Run a single unit test suite by name (the config name from `test/` without the leading number, e.g. `default`):
+
+    ```bash
+    platformio run -t marlin_default -e linux_native_test
+    ```
+  </Tab>
+  <Tab title="Make (local)">
+    Run all unit tests:
+
+    ```bash
+    make unit-test-all-local
+    ```
+
+    Run a single unit test suite using `UNIT_TEST_CONFIG`:
+
+    ```bash
+    make unit-test-single-local UNIT_TEST_CONFIG=default
+    ```
+  </Tab>
+  <Tab title="Docker">
+    Run all unit tests in Docker:
+
+    ```bash
+    make unit-test-all-local-docker
+    ```
+
+    Run a single unit test suite in Docker:
+
+    ```bash
+    make unit-test-single-local-docker UNIT_TEST_CONFIG=default
+    ```
+  </Tab>
+</Tabs>
+
+## Adding build tests
+
+When your PR adds new features or configuration options, add at least one build test to `buildroot/tests/` for the most relevant target platform. A build test script uses shell helper functions to set up and build:
+
+```bash
+#!/usr/bin/env bash
+# Build tests for AVR ATmega2560
+
+set -e
+
+restore_configs
+opt_enable MY_NEW_FEATURE
+exec_test $1 $2 "MEGA2560 RAMPS | MY_NEW_FEATURE enabled" "$3"
+
+restore_configs
+opt_enable MY_NEW_FEATURE SDSUPPORT EEPROM_SETTINGS
+exec_test $1 $2 "MEGA2560 RAMPS | MY_NEW_FEATURE with SD and EEPROM" "$3"
+```
+
+- `restore_configs` — resets to the default configuration.
+- `opt_enable FEATURE [FEATURE2 ...]` — enables one or more configuration options.
+- `opt_disable FEATURE` — disables a configuration option.
+- `opt_set OPTION value` — sets a configuration option to a specific value.
+- `exec_test $1 $2 "Description" "$3"` — compiles and reports the result.
+
+## Adding unit tests
+
+If the feature you're adding can be tested without real hardware, write a unit test in `Marlin/tests/`. Place it in the appropriate subdirectory (`core/`, `feature/`, or `gcode/`) and use the `MARLIN_TEST` macro:
+
+```cpp
+#include "../test/unit_tests.h"
+#include "src/core/macros.h"
+
+MARLIN_TEST(my_feature, basic_behavior) {
+  // Arrange
+  uint8_t value = 0;
+
+  // Act
+  SBI(value, 3);
+
+  // Assert
+  TEST_ASSERT_EQUAL(0x08, value);
+}
+```
+
+Use `ENABLED(FEATURE)` and `TERN()` macros inside tests to conditionally compile test logic based on the active configuration.
+
+## CI integration
+
+The GitHub CI pipeline automatically runs on every pull request:
+
+- **`ci-build-tests.yml`** — runs the build tests in `buildroot/tests/` for all supported platforms.
+- **`ci-unit-tests.yml`** — runs all unit test suites across all configurations in `test/`.
+- **`ci-validate-lines.yml`** — checks for trailing whitespace and incorrect line endings.
+- **`ci-validate-pins.yml`** — validates all pins files for correct formatting.
+- **`ci-validate-boards.yml`** — validates `boards.h` and `pins.h` for standards compliance.
+
+All CI checks must pass before a PR can be merged.

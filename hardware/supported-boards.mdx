@@ -1,0 +1,216 @@
+---
+title: "Supported boards"
+description: "Full list of supported MCU platforms and example boards for Marlin 3D printer firmware."
+---
+
+Marlin 2.1 runs on both 8-bit AVR and 32-bit ARM hardware. A single shared codebase targets all platforms through the [Hardware Abstraction Layer (HAL)](/hardware/hal). The `MOTHERBOARD` define in `Configuration.h` selects the correct pin file and platform-specific code at compile time.
+
+## Platform table
+
+The following platforms are supported. Each entry corresponds to a HAL directory under `Marlin/src/HAL/` and a matching set of board definitions in `Marlin/src/core/boards.h`.
+
+| Platform | MCU | Example boards |
+|---|---|---|
+| Arduino AVR | ATmega (1280, 2560, 644P, 1284P, AT90USB1286) | RAMPS, Melzi, RAMBo |
+| Teensy++ 2.0 | AT90USB1286 | Printrboard |
+| Arduino Due | SAM3X8E (ARM Cortex-M3) | RAMPS-FD, RADDS, RAMPS4DUE |
+| ESP32 | Xtensa LX6 | FYSETC E4, E4d@BOX, MRR ESPA/ESPE |
+| GD32 | GD32 ARM Cortex-M3/M4 | Creality MFL GD32 V4.2.2, Voxelab Aquila (GD32) |
+| HC32 | HC32 ARM Cortex-M4 | Ender-2 Pro, Voxelab Aquila |
+| LPC1768 | ARM Cortex-M3 | MKS SBASE, Re-ARM, Selena Compact, BTT SKR V1.x |
+| LPC1769 | ARM Cortex-M3 | Smoothieboard, Azteeg X5 Mini, TH3D EZBoard, BTT SKR V1.4 TURBO |
+| Pico RP2040 | Dual ARM Cortex-M0+ | Raspberry Pi Pico, BTT SKR Pico |
+| STM32F103 | ARM Cortex-M3 | Malyan M200, GTM32 Pro, MKS Robin, BTT SKR Mini |
+| STM32F401 | ARM Cortex-M4 | Artillery Ruby, FYSETC Cheetah V2/V3, BTT SKR Mini E3 V3.0.1 |
+| STM32F4xx | ARM Cortex-M4 | ARMED, Rumba32, BTT SKR Pro, Lerdge, FYSETC S6, BTT Octopus |
+| STM32F7x6 | ARM Cortex-M7 | RemRam V1 |
+| STM32G0B1 | ARM Cortex-M0+ | BTT SKR Mini E3 V3.0, BTT Manta M4P/M5P/M8P, BTT SKRat |
+| STM32H743 | ARM Cortex-M7 | BTT SKR V3.0, BTT SKR SE BX V2/V3, BTT Octopus Pro V1.1 |
+| SAMD21 | ARM Cortex-M0+ | Minitronics v2.0 |
+| SAMD51 | ARM Cortex-M4 | Adafruit Grand Central M4, RAMPS 1.4.4 |
+| Teensy 3.1/3.2 | MK20DX256VLH7 ARM Cortex-M4 | — |
+| Teensy 3.5/3.6 | MK64FX512 / MK66FX1M0 ARM Cortex-M4 | — |
+| Teensy 4.0/4.1 | MIMXRT1062 ARM Cortex-M7 | T41U5XBB |
+| Linux Native | x86 / ARM / RISC-V | Raspberry Pi GPIO |
+| Simulator | Windows, macOS, Linux | Desktop OS |
+
+<Note>
+The Simulator (`BOARD_SIMULATED`, board number 9999) lets you run Marlin on a desktop OS without physical hardware. It is intended for UI development and automated testing, not for controlling a real printer. See the `NATIVE_SIM` HAL directory for implementation details.
+</Note>
+
+## 8-bit AVR boards
+
+Marlin began on Arduino-based 8-bit hardware and continues to support it. These boards are defined in `boards.h` with IDs in the `1000–1999` range.
+
+### RAMPS 1.3 / 1.4 (ATmega1280, ATmega2560)
+
+The most common AVR platform. Pin assignments live in `src/pins/ramps/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_RAMPS_14_EFB` | 1020 | RAMPS 1.4 — Hotend, Fan, Bed |
+| `BOARD_RAMPS_14_EEB` | 1021 | RAMPS 1.4 — Hotend0, Hotend1, Bed |
+| `BOARD_RAMPS_14_EFF` | 1022 | RAMPS 1.4 — Hotend, Fan0, Fan1 |
+| `BOARD_RAMPS_14_EEF` | 1023 | RAMPS 1.4 — Hotend0, Hotend1, Fan |
+| `BOARD_RAMPS_BTT_16_PLUS_EFB` | 1040 | BigTreeTech RAMPS 1.6+ — Hotend, Fan, Bed |
+| `BOARD_MKS_BASE` | 1107 | MKS BASE v1.0 |
+| `BOARD_MKS_GEN_L` | 1113 | MKS GEN L |
+| `BOARD_RUMBA` | 1127 | Rumba |
+| `BOARD_ULTIMAKER` | 1122 | Ultimaker |
+| `BOARD_RAMPS_CREALITY` | 1140 | Creality CR10S, CR20, CR-X |
+
+### RAMBo and derivatives (ATmega2560)
+
+Pin files in `src/pins/rambo/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_RAMBO` | 1200 | Rambo |
+| `BOARD_MINIRAMBO` | 1201 | Mini-Rambo |
+| `BOARD_EINSY_RAMBO` | 1203 | Einsy Rambo |
+
+### Sanguinololu / Melzi (ATmega644P, ATmega1284P)
+
+Pin files in `src/pins/sanguino/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_SANGUINOLOLU_12` | 1501 | Sanguinololu 1.2+ |
+| `BOARD_MELZI` | 1502 | Melzi |
+| `BOARD_MELZI_CREALITY` | 1505 | Melzi Creality3D (CR-10 etc.) |
+| `BOARD_ANET_10` | 1511 | Anet 1.0 (Melzi clone) |
+
+### Teensyduino (AT90USB1286)
+
+Pin files in `src/pins/teensy2/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_TEENSY2` | 1706 | Teensy++ 2.0 |
+| `BOARD_PRINTRBOARD` | 1701 | Printrboard |
+| `BOARD_PRINTRBOARD_REVF` | 1702 | Printrboard Revision F |
+
+## 32-bit ARM boards
+
+32-bit boards support all Marlin features. Board IDs start at `2000`.
+
+### LPC1768 / LPC1769 (ARM Cortex-M3)
+
+Pin files in `src/pins/lpc1768/` and `src/pins/lpc1769/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_MKS_SBASE` | 2005 | MKS-Sbase |
+| `BOARD_BTT_SKR_V1_4` | 2014 | BigTreeTech SKR V1.4 |
+| `BOARD_BTT_SKR_V1_4_TURBO` | 2508 | BigTreeTech SKR V1.4 TURBO (LPC1769) |
+| `BOARD_SMOOTHIEBOARD` | 2506 | Smoothieboard |
+| `BOARD_BTT_SKR_E3_TURBO` | 2510 | BigTreeTech SKR E3 Turbo |
+
+### Arduino Due / SAM3X8E (ARM Cortex-M3)
+
+Pin files in `src/pins/sam/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_RADDS` | 3002 | RADDS v1.5/v1.6 |
+| `BOARD_RAMPS_FD_V2` | 3004 | RAMPS-FD v2 |
+| `BOARD_ARCHIM2` | 3024 | UltiMachine Archim2 (TMC2130) |
+
+### STM32F1 (ARM Cortex-M3)
+
+Pin files in `src/pins/stm32f1/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_MKS_ROBIN_NANO` | 5012 | MKS Robin Nano (STM32F103VE) |
+| `BOARD_BTT_SKR_MINI_E3_V2_0` | 5025 | BigTreeTech SKR Mini E3 V2.0 |
+| `BOARD_CREALITY_V422` | 5039 | Creality V4.2.2 |
+| `BOARD_CREALITY_V427` | 5042 | Creality V4.2.7 |
+
+### STM32F4 (ARM Cortex-M4)
+
+Pin files in `src/pins/stm32f4/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_BTT_SKR_PRO_V1_2` | 5209 | BigTreeTech SKR Pro V1.2 (STM32F407ZG) |
+| `BOARD_BTT_SKR_V2_0_REV_B` | 5213 | BigTreeTech SKR V2.0 Rev B |
+| `BOARD_BTT_OCTOPUS_V1_1` | 5216 | BigTreeTech Octopus V1.1 (STM32F446ZE) |
+| `BOARD_FYSETC_SPIDER` | 5223 | FYSETC Spider (STM32F446VE) |
+| `BOARD_MKS_MONSTER8_V2` | 5231 | MKS Monster8 V2 (STM32F407VE) |
+| `BOARD_ARTILLERY_RUBY` | 5241 | Artillery Ruby (STM32F401RC) |
+
+### STM32G0 (ARM Cortex-M0+)
+
+Pin files in `src/pins/stm32g0/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_BTT_SKR_MINI_E3_V3_0` | 4001 | BigTreeTech SKR Mini E3 V3.0 |
+| `BOARD_BTT_MANTA_M8P_V1_1` | 4006 | BigTreeTech Manta M8P V1.1 |
+| `BOARD_BTT_SKRAT_V1_0` | 4007 | BigTreeTech SKRat V1.0 |
+
+### STM32H7 (ARM Cortex-M7)
+
+Pin files in `src/pins/stm32h7/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_BTT_SKR_V3_0` | 6004 | BigTreeTech SKR V3.0 (STM32H743VI) |
+| `BOARD_BTT_SKR_V3_0_EZ` | 6005 | BigTreeTech SKR V3.0 EZ |
+| `BOARD_BTT_OCTOPUS_PRO_V1_1` | 6008 | BigTreeTech Octopus Pro V1.1 (STM32H723ZE) |
+| `BOARD_BTT_MANTA_M8P_V2_0` | 6009 | BigTreeTech Manta M8P V2.0 |
+| `BOARD_BTT_KRAKEN_V1_0` | 6010 | BigTreeTech Kraken V1.0 |
+| `BOARD_TEENSY40` | 6011 | Teensy 4.0 (MIMXRT1062) |
+| `BOARD_TEENSY41` | 6012 | Teensy 4.1 (MIMXRT1062) |
+
+### ESP32
+
+Pin files in `src/pins/esp32/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_ESPRESSIF_ESP32` | 7000 | Generic ESP32 |
+| `BOARD_MRR_ESPE` | 7002 | MRR ESPE (with I2S stepper stream) |
+| `BOARD_FYSETC_E4` | 7005 | FYSETC E4 |
+| `BOARD_MKS_TINYBEE` | 7008 | MKS TinyBee |
+
+### SAMD51 / SAMD21 (ARM Cortex-M4 / M0+)
+
+Pin files in `src/pins/samd/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_AGCM4_RAMPS_144` | 7100 | RAMPS 1.4.4 (SAMD51) |
+| `BOARD_BRICOLEMON_V1_0` | 7101 | Bricolemon (SAMD51) |
+| `BOARD_MINITRONICS20` | 7103 | Minitronics v2.0 (SAMD21) |
+
+### HC32 (ARM Cortex-M4)
+
+Pin files in `src/pins/hc32f4/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_AQUILA_V101` | 7200 | Voxelab Aquila V1.0.x (HC32F460) |
+| `BOARD_CREALITY_ENDER2P_V24S4` | 7201 | Creality Ender-2 Pro v2.4.S4 |
+
+### RP2040 (Dual ARM Cortex-M0+)
+
+Pin files in `src/pins/rp2040/`.
+
+| Board constant | Board ID | Description |
+|---|---|---|
+| `BOARD_RP2040` | 6200 | Generic RP2040 |
+| `BOARD_RASPBERRY_PI_PICO` | 6201 | Raspberry Pi Pico |
+| `BOARD_BTT_SKR_PICO` | 6202 | BigTreeTech SKR Pico 1.x |
+
+## Explore further
+
+<CardGroup cols={2}>
+  <Card title="Hardware Abstraction Layer" icon="microchip" href="/hardware/hal">
+    How the HAL unifies motion, I/O, and timer APIs across all platforms.
+  </Card>
+  <Card title="Pin configuration" icon="cpu" href="/hardware/pins">
+    How pin assignments are defined per-board and how to read them.
+  </Card>
+</CardGroup>

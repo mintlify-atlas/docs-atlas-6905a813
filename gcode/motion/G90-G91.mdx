@@ -1,0 +1,103 @@
+---
+title: "G90/G91 — Absolute/relative positioning"
+description: "Switch between absolute and relative coordinate modes for motion commands"
+---
+
+G90 and G91 control how Marlin interprets the coordinate values in subsequent motion commands (G0, G1, G2, G3, etc.).
+
+- **G90** — Absolute mode. Coordinates are positions in the machine coordinate space. `G1 X50` moves the toolhead *to* X=50 mm from the origin.
+- **G91** — Relative mode. Coordinates are offsets from the current position. `G1 X10` moves the toolhead *10 mm in the positive X direction* from wherever it currently is.
+
+Marlin starts in absolute mode (G90) by default.
+
+## Syntax
+
+```gcode
+G90   ; Switch to absolute positioning
+G91   ; Switch to relative positioning
+```
+
+Neither command takes any parameters.
+
+## The extruder axis
+
+The E axis follows a separate flag. In G90 mode, E is still absolute by default unless you explicitly switch it with M83. In G91 mode, E becomes relative along with the other axes.
+
+| Command | XYZ mode | E mode |
+|---|---|---|
+| G90 | Absolute | Absolute (default) |
+| G90 + M83 | Absolute | Relative |
+| G91 | Relative | Relative |
+| G91 + M82 | Relative | Absolute |
+
+<Tip>
+  Most slicers emit `M82` (absolute E) at the start of a print and track the total filament position as a continuously increasing value. If you switch to relative E with M83 mid-print, make sure to switch back before handing control back to slicer-generated G-code.
+</Tip>
+
+## Usage notes
+
+**Switching mid-print**
+
+You can switch between G90 and G91 freely at any point. The change takes effect immediately for the next motion command. Always keep track of what mode you are in, especially inside macros or after calling `G28` (which does not change the coordinate mode).
+
+**Relative mode for incremental moves**
+
+G91 is convenient for incremental adjustments — for example, moving the toolhead a fixed offset without knowing the current absolute position:
+
+```gcode
+G91
+G1 Z5 F600    ; Raise Z by 5 mm from wherever it is
+G90           ; Return to absolute
+```
+
+**Interaction with G28**
+
+`G28` (auto home) does not reset or change the coordinate mode. After homing in G91 mode, subsequent moves are still interpreted as relative.
+
+**Interaction with G92**
+
+`G92` sets the current position to the given coordinate values, which changes the coordinate origin. This works in both absolute and relative mode and affects the reference point that absolute moves use.
+
+## Examples
+
+Move to an absolute position:
+
+```gcode
+G90           ; Absolute mode
+G1 X100 Y50 F3000
+```
+
+Move 10 mm in the X direction relative to the current position:
+
+```gcode
+G91           ; Relative mode
+G1 X10 F3000
+G90           ; Back to absolute
+```
+
+Raise Z 2 mm and retract 1 mm of filament:
+
+```gcode
+G91
+G1 Z2 E-1 F600
+G90
+```
+
+Switch extruder to relative while keeping XYZ absolute (common in slicer retract sequences):
+
+```gcode
+G90           ; XYZ absolute
+M83           ; E relative
+G1 E-0.8 F1800  ; Retract 0.8 mm
+G1 X10 Y10 F6000
+G1 E0.8 F1800   ; Recover 0.8 mm
+```
+
+## Related commands
+
+- [G0/G1 — Linear move](/gcode/motion/G0-G1)
+- [G2/G3 — Arc move](/gcode/motion/G2-G3)
+- [G28 — Auto home](/gcode/motion/G28)
+- G92 — Set current position
+- M82 — Set E axis to absolute mode
+- M83 — Set E axis to relative mode

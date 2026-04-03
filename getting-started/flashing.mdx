@@ -1,0 +1,178 @@
+---
+title: "Flashing firmware"
+description: "Upload compiled Marlin firmware to your 3D printer board via PlatformIO, SD card, or a hardware programmer."
+---
+
+After building Marlin, you need to transfer the compiled firmware onto your printer's control board. The method depends on your board: most 32-bit ARM boards accept a `.bin` file copied to an SD card, while 8-bit AVR boards are typically flashed over USB using a bootloader.
+
+<Warning>
+  Back up your existing firmware before flashing. Some boards do not have publicly available stock firmware, and flashing an incompatible or incomplete build may leave the printer inoperable. If your board supports reading the existing firmware via a hardware debugger (e.g., ST-Link), create a backup first.
+</Warning>
+
+## Flashing via PlatformIO
+
+PlatformIO can upload firmware directly to your board over USB, using the bootloader already present on the board.
+
+<Steps>
+  <Step title="Connect your board to your computer">
+    Use a USB cable to connect the printer control board to your computer. The board must be powered — either through USB alone or via the printer's PSU.
+  </Step>
+
+  <Step title="Check the upload settings in platformio.ini">
+    PlatformIO uses `upload_protocol` and `monitor_speed` settings defined in the environment. For example, the `mega2560` environment uses the default Arduino bootloader protocol over serial. The `BTT_SKR_PRO` environment uses `stlink`:
+
+    ```ini
+    [env:BTT_SKR_PRO]
+    debug_tool      = stlink
+    upload_protocol = stlink
+    ```
+
+    Most AVR boards default to the `arduino` upload protocol and do not require extra configuration.
+
+    <Tip>
+      The default `monitor_speed` across all Marlin environments is `250000` baud. Make sure your serial monitor (or host software like Pronterface/OctoPrint) is set to the same rate. Some environments override this — for example, `STM32F401RC_creality` uses `115200`.
+    </Tip>
+  </Step>
+
+  <Step title="Upload the firmware">
+    <Tabs>
+      <Tab title="PlatformIO CLI">
+        ```bash
+        platformio run -e mega2560 --target upload
+        ```
+
+        Replace `mega2560` with your board's environment name. PlatformIO will compile (if not already built) and upload in one step.
+
+        To upload without recompiling, run:
+
+        ```bash
+        platformio run -e mega2560 --target upload --disable-auto-clean
+        ```
+      </Tab>
+
+      <Tab title="VSCode (Auto Build Marlin)">
+        In the **Auto Build Marlin** panel, click the **Upload** button (arrow icon) next to your board's environment. The terminal panel shows upload progress and any errors.
+      </Tab>
+
+      <Tab title="Arduino IDE">
+        With your board and port selected under the **Tools** menu, click **Upload** (right-arrow icon) or use **Sketch → Upload**.
+
+        Arduino IDE compiles and uploads in one step. The board's onboard LED typically flashes during upload.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Verify the upload">
+    After uploading, the board will reset and boot the new firmware. Connect a serial monitor at the correct baud rate to see the startup output:
+
+    ```
+    start
+    echo:Marlin 2.1.x-bugfix
+    ```
+
+    You can also use PlatformIO's built-in monitor:
+
+    ```bash
+    platformio device monitor -e mega2560
+    ```
+  </Step>
+</Steps>
+
+## Flashing via SD card
+
+Many 32-bit ARM boards (Creality, BigTreeTech, MKS, and others) can be flashed by placing the compiled `.bin` file on a microSD card and powering on the board.
+
+<Steps>
+  <Step title="Locate the compiled binary">
+    After building, find the output file in `.pio/build/<env-name>/`. The filename depends on the environment:
+
+    | Environment | Output filename |
+    |---|---|
+    | `BTT_SKR_PRO` | `firmware.bin` |
+    | `mks_robin_nano_v3` | `Robin_nano_v3.bin` |
+    | `STM32F401RC_creality` | `firmware-{date}-{time}.bin` |
+    | `STM32F446ZE_btt` | `firmware.bin` |
+
+    Some boards require the file to have a specific name. Check the documentation for your board if the standard name does not work.
+  </Step>
+
+  <Step title="Copy the file to an SD card">
+    Format a microSD card as FAT32. Copy the `.bin` file to the root of the card. Do not rename the file unless your board specifically requires a different name.
+
+    <Note>
+      Some boards will only flash a firmware file if it has a different name than the one previously flashed. If re-flashing the same board, rename the file slightly (e.g., `firmware2.bin`) or delete the old file from the card first.
+    </Note>
+  </Step>
+
+  <Step title="Insert the card and power on">
+    Insert the microSD card into the board's SD slot. Power on the printer. The board will detect the firmware file and flash it automatically — this usually takes 5–30 seconds. The board may blink an LED or show a progress indicator on the display.
+  </Step>
+
+  <Step title="Remove the SD card and verify">
+    After flashing, power off the printer, remove the SD card, and power on again. The firmware file on the card is sometimes renamed to `.CUR` or deleted after a successful flash — this indicates the process completed.
+
+    Connect a serial monitor or use your printer's LCD to confirm the new version is running.
+  </Step>
+</Steps>
+
+## Flashing via hardware programmer
+
+Some boards lack a bootloader or require a hardware debugger (ST-Link, J-Link) for the initial flash. This is common for 32-bit STM32 boards that ship without a pre-installed bootloader.
+
+<Steps>
+  <Step title="Connect the programmer">
+    Connect your ST-Link or J-Link to the board's SWD header (usually a 4-pin connector labelled `SWDIO`, `SWDCLK`, `GND`, and `3.3V` or `VCC`). Check your board's pinout documentation for the exact location.
+  </Step>
+
+  <Step title="Configure the environment">
+    Make sure your `platformio.ini` environment specifies the correct `upload_protocol` and `debug_tool`. For example:
+
+    ```ini
+    [env:BTT_SKR_PRO]
+    debug_tool      = stlink
+    upload_protocol = stlink
+    ```
+
+    For J-Link:
+
+    ```ini
+    [env:mks_robin_nano_v3]
+    debug_tool      = jlink
+    upload_protocol = jlink
+    ```
+  </Step>
+
+  <Step title="Flash the firmware">
+    ```bash
+    platformio run -e BTT_SKR_PRO --target upload
+    ```
+
+    PlatformIO will use the connected programmer to write the firmware directly to the board's flash memory.
+  </Step>
+</Steps>
+
+## Flashing with DFU (USB Device Firmware Upgrade)
+
+Several STM32-based environments use DFU for uploading via USB without a separate hardware programmer:
+
+```bash
+platformio run -e rumba32 --target upload
+```
+
+For environments using `dfu-util`, the upload command is defined in `platformio.ini`. For example, `FYSETC_CHEETAH_V20`:
+
+```ini
+upload_command = dfu-util -a 0 -s 0x08008000:leave -D "$SOURCE"
+```
+
+To enter DFU mode, most boards require you to hold the **BOOT** button while pressing **RESET**, or to bridge the BOOT0 pin to 3.3V before powering on. Consult your board's documentation for the specific procedure.
+
+## Troubleshooting
+
+**Upload fails with "no device found"** — Check the USB cable, try a different port, and ensure the board is powered. On Linux, you may need to add udev rules for your programmer or board.
+
+**AVR board not detected** — Make sure the correct COM port or `/dev/ttyUSB*` device is selected. The `CH340` USB-to-serial chip used by many AVR boards may require a driver on Windows and macOS.
+
+**Firmware doesn't start after flashing** — Verify you built for the correct environment matching your board. A mismatch between the firmware and board (especially bootloader offset settings) can prevent the board from booting.
+
+**ST-Link error: "Cannot connect to target"** — Ensure the SWD connections are secure. Some STM32 boards enter a low-power state that prevents connection; try holding RESET while initiating the upload.

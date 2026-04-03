@@ -1,0 +1,392 @@
+---
+title: "G29 — Bed leveling"
+description: "Probe the bed and create a leveling mesh to compensate for surface variation"
+---
+
+G29 probes the printer bed and builds a compensation mesh that Marlin uses to adjust the Z axis in real time during printing. The exact behavior depends on which bed leveling system is compiled into the firmware: **Auto Bed Leveling (ABL)**, **Unified Bed Leveling (UBL)**, or **Mesh Bed Leveling (MBL)**.
+
+<Note>
+  G28 (home all axes) must be run before G29. G29 will abort with an error if the axes have not been homed. For convenience, you can send `G28` immediately before `G29` in your start G-code.
+</Note>
+
+<Tabs>
+  <Tab title="Bilinear ABL">
+
+    Auto Bed Leveling probes a grid of points across the bed and applies bilinear interpolation between them to compensate for surface variation. The grid size is fixed by `GRID_MAX_POINTS_X` and `GRID_MAX_POINTS_Y` in `Configuration.h`.
+
+    ## Syntax
+
+    ```gcode
+    G29 [A] [C] [D] [E] [J] [O] [Q] [V<level>]
+        [H<size> | F<pos> B<pos> L<pos> R<pos>]
+        [S<rate>]
+        [W [I<index>] [J<index>] [X<pos>] [Y<pos>] [Z<value>]]
+        [Z<offset>]
+    ```
+
+    ## Parameters
+
+    <ParamField path="O" type="flag">
+      Skip leveling if it is already active. Useful as a guard in start G-code — if the mesh is still valid from a previous run, G29 does nothing and the print proceeds immediately.
+    </ParamField>
+
+    <ParamField path="D" type="flag">
+      Dry-run mode. Probe the bed and evaluate the topology but do not apply or modify the leveling data. Useful for checking an existing mesh without overwriting it.
+    </ParamField>
+
+    <ParamField path="J" type="flag">
+      Jettison (discard) the current leveling data and disable bed leveling.
+    </ParamField>
+
+    <ParamField path="V" type="integer (0–4)">
+      Verbose level. Higher values print more detail to the serial port during probing. `V0` is silent; `V3` and above print the full topology map.
+    </ParamField>
+
+    <ParamField path="E" type="flag">
+      Engage and disengage (stow) the Z probe between every sample. By default the probe is deployed once for the entire grid and stowed at the end. Use `E` when your probe needs to be retracted between points.
+    </ParamField>
+
+    <ParamField path="Q" type="flag">
+      Query the current leveling and G29 state without starting a new probe sequence. Only available with `PROBE_MANUALLY` or `DEBUG_LEVELING_FEATURE`.
+    </ParamField>
+
+    <ParamField path="A" type="flag">
+      Abort a manual probing sequence in progress (`PROBE_MANUALLY` only).
+    </ParamField>
+
+    <ParamField path="S" type="float">
+      XY travel speed between probe points in mm/min. Overrides `XY_PROBE_FEEDRATE` for this run.
+    </ParamField>
+
+    <ParamField path="H" type="float">
+      Probe a centered square region of this size (in mm). For example, `H100` probes a 100×100 mm area centered on the bed. Cannot be combined with `F`, `B`, `L`, or `R`.
+    </ParamField>
+
+    <ParamField path="F" type="float">
+      Front Y limit of the probing area (mm). Defaults to the probe's minimum reachable Y.
+    </ParamField>
+
+    <ParamField path="B" type="float">
+      Back Y limit of the probing area (mm). Defaults to the probe's maximum reachable Y.
+    </ParamField>
+
+    <ParamField path="L" type="float">
+      Left X limit of the probing area (mm). Defaults to the probe's minimum reachable X.
+    </ParamField>
+
+    <ParamField path="R" type="float">
+      Right X limit of the probing area (mm). Defaults to the probe's maximum reachable X.
+    </ParamField>
+
+    <ParamField path="Z" type="float">
+      Additional Z offset applied to all probed points. Use to fine-tune the whole mesh up or down by a fixed amount.
+    </ParamField>
+
+    <ParamField path="W" type="flag">
+      Write a single mesh point without probing. Requires an existing valid bilinear grid. Combine with `I`/`J` (grid indices) or `X`/`Y` (coordinates) to identify the point, and `Z` to set its value. If `Z` is omitted, the current raw Z position is used.
+    </ParamField>
+
+    ## Examples
+
+    Run a standard bilinear probe using the configured grid:
+
+    ```gcode
+    G28    ; Home all axes
+    G29    ; Probe the bed and enable leveling
+    M500   ; Save mesh to EEPROM
+    ```
+
+    Dry-run with verbose output to inspect the current bed topology:
+
+    ```gcode
+    G29 D V3
+    ```
+
+    Probe a 150×150 mm area centered on the bed:
+
+    ```gcode
+    G29 H150
+    ```
+
+    Manually set mesh point at grid index (2, 3) to −0.05 mm:
+
+    ```gcode
+    G29 W I2 J3 Z-0.05
+    ```
+
+  </Tab>
+  <Tab title="UBL">
+
+    Unified Bed Leveling is a multi-phase system that combines automatic probing, manual probing of unreachable points, and interactive fine-tuning. You build and refine the mesh through a series of `G29 P<phase>` commands rather than a single probe run.
+
+    ## Syntax
+
+    ```gcode
+    G29 [A] [D] [P<phase>] [S<slot>] [L<slot>] [J<size>]
+        [Q<pattern>] [T[<type>]] [V<level>]
+        [B[<thickness>]] [C[<value>]] [E] [F<height>]
+        [H<height>] [I<count>] [R<count>]
+        [U] [X<pos>] [Y<pos>]
+    ```
+
+    ## Parameters
+
+    <ParamField path="A" type="flag">
+      Activate UBL — enable bed leveling compensation.
+    </ParamField>
+
+    <ParamField path="D" type="flag">
+      Disable UBL — turn off bed leveling compensation.
+    </ParamField>
+
+    <ParamField path="P" type="integer (0–6)">
+      Phase. Selects which operation to perform:
+
+      | Phase | Operation |
+      |-------|-----------|
+      | `P0`  | Zero the mesh — set all points to 0.0 and disable UBL |
+      | `P1`  | Automatically probe all reachable mesh points using the Z probe |
+      | `P2`  | Manually probe points the Z probe cannot reach (requires LCD) |
+      | `P3`  | Smart-fill unpopulated (invalid) mesh points using adjacent data |
+      | `P4`  | Fine-tune individual mesh points interactively via the LCD |
+      | `P5`  | Report mean mesh height and standard deviation; use `C` to normalize the mesh to zero mean |
+      | `P6`  | Shift the entire mesh height by a constant value given with `C` |
+    </ParamField>
+
+    <ParamField path="S" type="integer">
+      Store the current mesh to the specified EEPROM slot. `S0` stores to slot 0 (default). `S-1` exports the mesh to the host as G-code that can be replayed to restore it.
+    </ParamField>
+
+    <ParamField path="L" type="integer">
+      Load a mesh from the specified EEPROM slot. If no value is given, the last activated slot is used.
+    </ParamField>
+
+    <ParamField path="J" type="integer (0 or 2–9)">
+      Tilt the mesh by probing a grid of the given size and applying a least-squares plane fit. `J0` (or `J` with no value) uses a 3-point leveling method instead.
+    </ParamField>
+
+    <ParamField path="Q" type="integer (0–2)">
+      Load a test pattern into the mesh. Used for development and verification. `Q0` creates a bowl shape; `Q1` a diagonal ridge; `Q2` a raised rectangle in the center.
+    </ParamField>
+
+    <ParamField path="T" type="integer (0–2)">
+      Display the mesh topology map. `T0` is a human-readable grid (default); `T1` outputs CSV suitable for spreadsheet import; `T2` is an LCD-formatted display.
+    </ParamField>
+
+    <ParamField path="V" type="integer (0–4)">
+      Verbosity level. Higher values print more detail during operations. Defaults to `0`.
+    </ParamField>
+
+    <ParamField path="C" type="float">
+      Constant value used by `P3` (fill value), `P5` (normalize with this offset), `P6` (shift amount), and `Q2` (raised region height).
+    </ParamField>
+
+    <ParamField path="R" type="integer">
+      Repeat count for `P3` and `P4`. Without `R`, the default is to process the entire mesh (`GRID_MAX_POINTS`).
+    </ParamField>
+
+    <ParamField path="I" type="integer">
+      Invalidate the specified number of mesh points nearest to the current or given XY position. If no value is given, only the single nearest point is invalidated. Use with `T` to verify which points were cleared.
+    </ParamField>
+
+    <ParamField path="E" type="flag">
+      Stow the probe after each measured point during `P1`. By default the probe stays deployed for the full probing pass.
+    </ParamField>
+
+    <ParamField path="F" type="float">
+      Fade height in mm. Gradually reduces the mesh compensation as Z increases, reaching zero correction at this height. Requires `ENABLE_LEVELING_FADE_HEIGHT`.
+    </ParamField>
+
+    <ParamField path="H" type="float">
+      With `P2`: nozzle clearance height between manually-probed points. With `P4`: Z offset above the mesh height to park the nozzle for editing.
+    </ParamField>
+
+    <ParamField path="B" type="float">
+      Business card (shim) mode for `P2`. Measures or applies a shim thickness so that the nozzle-bed distance is consistent across all manual probing points. Omit the value on first use to measure the shim; subsequent calls use the measured value.
+    </ParamField>
+
+    <ParamField path="U" type="flag">
+      During `P1`, probe the outer perimeter of the bed first. Useful when physically tramming an unlevel bed — you can tram while reviewing the perimeter data before committing to a full mesh.
+    </ParamField>
+
+    <ParamField path="X" type="float">
+      X coordinate used as the starting or reference position for `P1`, `P2`, `P4`, `I`, and `J` operations. Must be paired with `Y`.
+    </ParamField>
+
+    <ParamField path="Y" type="float">
+      Y coordinate used as the starting or reference position. Must be paired with `X`.
+    </ParamField>
+
+    ## Typical workflow
+
+    <Steps>
+      <Step title="Initialize EEPROM">
+        Before first use, initialize the EEPROM storage:
+        ```gcode
+        M502    ; Reset to firmware defaults
+        M500    ; Save defaults to EEPROM
+        ```
+      </Step>
+      <Step title="Home and auto-probe">
+        ```gcode
+        G28         ; Home all axes
+        G29 P1      ; Probe all reachable points
+        ```
+      </Step>
+      <Step title="Fill unreachable points">
+        ```gcode
+        G29 P3      ; Smart-fill any invalid points
+        ```
+      </Step>
+      <Step title="View the mesh">
+        ```gcode
+        G29 T       ; Print the topology map
+        ```
+      </Step>
+      <Step title="Save to EEPROM">
+        ```gcode
+        G29 S0      ; Save mesh to slot 0
+        M500        ; Save all settings
+        ```
+      </Step>
+      <Step title="Activate leveling">
+        ```gcode
+        M420 S1     ; Enable the saved mesh
+        ```
+      </Step>
+    </Steps>
+
+    ## Examples
+
+    Probe the bed, fill gaps, save to slot 1, and display the map:
+
+    ```gcode
+    G28
+    G29 P1
+    G29 P3
+    G29 T
+    G29 S1
+    M500
+    ```
+
+    Load slot 0 and activate:
+
+    ```gcode
+    M420 L0 S1
+    ```
+
+    Invalidate the mesh point nearest to X50 Y60 and display the updated map:
+
+    ```gcode
+    G29 I X50 Y60 T
+    ```
+
+    Normalize the mesh to zero mean and save:
+
+    ```gcode
+    G29 P5 C
+    G29 S0
+    M500
+    ```
+
+  </Tab>
+  <Tab title="Mesh Bed Leveling">
+
+    Mesh Bed Leveling is a fully manual system. You physically move the nozzle to each mesh point and set the Z height by hand (typically with a piece of paper or feeler gauge). No probe hardware is required.
+
+    ## Syntax
+
+    ```gcode
+    G29 S<state> [I<index>] [J<index>] [Z<value>]
+    ```
+
+    ## Parameters
+
+    <ParamField path="S" type="integer (0–5)">
+      State / operation to perform:
+
+      | Value | Operation |
+      |-------|-----------|
+      | `S0`  | Report the current mesh values and leveling state |
+      | `S1`  | Start a new mesh probing sequence; resets the mesh and begins at the first point |
+      | `S2`  | Move to the next mesh point in the sequence; repeat until all points are measured |
+      | `S3`  | Manually set a single mesh point to a Z value (requires `I`, `J`, and `Z`) |
+      | `S4`  | Set the global Z offset for the mesh. Positive moves the nozzle away from the bed; negative moves it closer |
+      | `S5`  | Reset the mesh and disable Mesh Bed Leveling |
+    </ParamField>
+
+    <ParamField path="I" type="integer">
+      X-axis grid index (0-based) for `S3`. Must be in range `0` to `GRID_MAX_POINTS_X - 1`.
+    </ParamField>
+
+    <ParamField path="J" type="integer">
+      Y-axis grid index (0-based) for `S3`. Must be in range `0` to `GRID_MAX_POINTS_Y - 1`.
+    </ParamField>
+
+    <ParamField path="Z" type="float">
+      Z value to assign to the mesh point (for `S3`) or global Z offset to set (for `S4`).
+    </ParamField>
+
+    ## Typical workflow
+
+    <Steps>
+      <Step title="Home and start the sequence">
+        ```gcode
+        G28      ; Home all axes
+        G29 S1   ; Start mesh probing
+        ```
+        The nozzle moves close to the first mesh point.
+      </Step>
+      <Step title="Adjust Z at each point">
+        Lower or raise the nozzle manually (using the LCD or jog controls) until it just touches the bed with a sheet of paper underneath. Then advance to the next point:
+        ```gcode
+        G29 S2   ; Record current Z and move to next point
+        ```
+        Repeat `G29 S2` for every point in the grid. The firmware reports how many points remain.
+      </Step>
+      <Step title="Save the mesh">
+        After the last point the printer re-homes and enables leveling automatically. Save the result to EEPROM:
+        ```gcode
+        M500
+        ```
+      </Step>
+    </Steps>
+
+    ## Examples
+
+    Report the current mesh:
+
+    ```gcode
+    G29 S0
+    ```
+
+    Manually override mesh point at grid position (1, 2) to 0.15 mm:
+
+    ```gcode
+    G29 S3 I1 J2 Z0.15
+    ```
+
+    Set a global +0.1 mm Z offset across the whole mesh:
+
+    ```gcode
+    G29 S4 Z0.1
+    ```
+
+    Reset and disable the mesh:
+
+    ```gcode
+    G29 S5
+    ```
+
+  </Tab>
+</Tabs>
+
+## Related commands
+
+- [M420 — Bed leveling state](/gcode/bedlevel/M420) — enable or disable leveling, set fade height, load/print mesh
+- M421 — Edit a single mesh point
+- G26 — Mesh validation pattern (prints a test pattern to verify mesh quality)
+- G35 — Tramming assistant (probe-based gantry/bed tramming)
+- [G28 — Auto home](/gcode/motion/G28)
+- M500 — Save settings to EEPROM
+- M502 — Reset settings to firmware defaults

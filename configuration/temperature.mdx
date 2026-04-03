@@ -1,0 +1,239 @@
+---
+title: "Temperature settings"
+description: "Configure thermistor types, PID tuning, thermal protection, and cold extrusion prevention in Marlin."
+---
+
+Temperature configuration spans the `// @section temperature sensors`, `// @section hotend temp`, `// @section bed temp`, and `// @section safety` blocks in `Configuration.h`. Getting these settings right is essential for safe and reliable printing.
+
+## Choosing a temperature sensor type
+
+Marlin uses numeric codes to select the thermistor table or sensor driver for each heating zone. The code you choose must match the actual thermistor installed on your hardware — using the wrong table will produce incorrect temperature readings.
+
+```cpp
+// @section temperature sensors
+
+#define TEMP_SENSOR_0 1       // First hotend
+#define TEMP_SENSOR_1 0       // Second hotend (0 = not present)
+#define TEMP_SENSOR_2 0
+#define TEMP_SENSOR_3 0
+#define TEMP_SENSOR_4 0
+#define TEMP_SENSOR_5 0
+#define TEMP_SENSOR_6 0
+#define TEMP_SENSOR_7 0
+#define TEMP_SENSOR_BED 1     // Heated bed
+#define TEMP_SENSOR_PROBE 0   // Probe temperature sensor
+#define TEMP_SENSOR_CHAMBER 0 // Enclosure heater/sensor
+#define TEMP_SENSOR_COOLER 0  // Laser cooling
+#define TEMP_SENSOR_BOARD 0   // MCU board sensor
+#define TEMP_SENSOR_SOC 0     // SoC internal sensor
+#define TEMP_SENSOR_REDUNDANT 0
+```
+
+Set unused sensors to `0`. The common codes are:
+
+**Analog thermistors with 4.7 kΩ pullup (standard)**
+
+| Code | Thermistor | Notes |
+|---|---|---|
+| `1` | 100 kΩ EPCOS | Best choice for EPCOS thermistors; default in most configs |
+| `2` | 200 kΩ ATC Semitec 204GT-2 | |
+| `5` | 100 kΩ ATC Semitec 104GT-2/104NT-4 | E3D, J-Head, ParCan, SliceEngineering 300°C |
+| `11` | 100 kΩ, beta 3950, 1% | Wanhao i3, Keenovo silicone mats |
+| `13` | 100 kΩ Hisense up to 300°C | "Simple ONE" / "All In ONE" hotend |
+| `61` | 100 kΩ Formbot/Vivedino 350°C | beta 3950 |
+| `66` | 4.7 MΩ Dyze Design T-D500 | 500°C high-temperature |
+| `67` | 500 kΩ SliceEngineering 450°C | |
+
+**Analog RTDs**
+
+| Code | Sensor |
+|---|---|
+| `147` | Pt100 with 4.7 kΩ pullup |
+| `1047` | Pt1000 with 4.7 kΩ pullup (E3D) |
+| `1022` | Pt1000 with 2.2 kΩ pullup |
+
+**SPI thermocouple boards**
+
+| Code | Sensor |
+|---|---|
+| `-2` | MAX6675 thermocouple, 0–700°C |
+| `-3` | MAX31855 thermocouple, −200–700°C |
+| `-5` | MAX31865 with Pt100 or Pt1000, 2/3/4-wire |
+
+**Special values**
+
+| Code | Meaning |
+|---|---|
+| `0` | Not used |
+| `1000` | Custom thermistor — configure in `Configuration_adv.h` |
+| `998` | Dummy, always reads 25°C (testing only) |
+| `999` | Dummy, always reads 100°C (testing only) |
+
+<Warning>
+Codes `998` and `999` disable all real temperature sensing. Never use them in a production build — the heater will run without proper feedback.
+</Warning>
+
+## Temperature limits
+
+Marlin shuts off heaters when temperatures fall outside the safe range.
+
+```cpp
+// @section temperature
+
+// Below this temperature the heater will be switched off
+// because it probably indicates a broken thermistor wire.
+#define HEATER_0_MINTEMP   5
+#define HEATER_1_MINTEMP   5
+// ...
+#define BED_MINTEMP        5
+#define CHAMBER_MINTEMP    5
+
+// Above this temperature the heater will be switched off.
+#define HEATER_0_MAXTEMP 275
+#define HEATER_1_MAXTEMP 275
+// ...
+#define BED_MAXTEMP      150
+#define CHAMBER_MAXTEMP  60
+```
+
+`HEATER_n_MINTEMP` protects against a broken or disconnected thermistor wire — if the sensor reads below this temperature, the heater is forced off. `HEATER_n_MAXTEMP` prevents overheating.
+
+<Warning>
+Set `HEATER_0_MAXTEMP` at least 15°C above your highest printing temperature. The `HOTEND_OVERSHOOT` value (default `15`) forbids setting a target temperature within 15°C of `MAXTEMP`, so your effective maximum print temperature is `MAXTEMP - 15`.
+</Warning>
+
+For a 275°C maximum with 15°C overshoot headroom, you can print up to 260°C. To print at 280°C with an all-metal hotend, raise `HEATER_0_MAXTEMP` to at least 295.
+
+## Hotend PID control
+
+```cpp
+// @section hotend temp
+
+/**
+ * Temperature Control
+ *
+ *  (NONE) : Bang-bang heating
+ * PIDTEMP : PID temperature control (~4.1K)
+ * MPCTEMP : Predictive Model temperature control. (~1.8K without auto-tune)
+ */
+#define PIDTEMP
+//#define MPCTEMP
+
+#define PID_MAX  255      // Limit hotend current while PID is active; 255=full current
+#define PID_K1     0.95   // Smoothing factor within any PID loop
+
+#if ENABLED(PIDTEMP)
+  #define DEFAULT_KP  22.20
+  #define DEFAULT_KI   1.08
+  #define DEFAULT_KD 114.00
+#endif
+```
+
+`PIDTEMP` (enabled by default) uses a PID loop that continuously adjusts heater power based on the difference between target and actual temperature. This produces stable, accurate temperatures.
+
+If you comment out `PIDTEMP`, Marlin falls back to **bang-bang** mode: the heater switches fully on or off based on a hysteresis window. Bang-bang is simpler but produces temperature oscillation.
+
+**MPCTEMP** (Model Predictive Control) is an alternative that uses a physical model of the hotend to predict required power. It can be more responsive than PID but requires characterizing your hotend with `M306 T`.
+
+### Tuning PID
+
+Run auto-tune with `M303`:
+
+```
+M303 E0 S200 C8
+```
+
+This heats hotend 0 to 200°C and runs 8 tuning cycles. After completion, Marlin prints suggested `Kp`, `Ki`, `Kd` values. Apply them with `M301 P<kp> I<ki> D<kd>` and save with `M500`.
+
+## Bed temperature control
+
+```cpp
+// @section bed temp
+
+#define MAX_BED_POWER 255 // limits duty cycle to bed; 255=full current
+
+/**
+ * PID Bed Heating
+ * With this option disabled, bang-bang will be used.
+ */
+//#define PIDTEMPBED
+
+#if ENABLED(PIDTEMPBED)
+  #define DEFAULT_BED_KP  10.00
+  #define DEFAULT_BED_KI   0.023
+  #define DEFAULT_BED_KD 305.4
+#else
+  //#define BED_LIMIT_SWITCHING   // Keep bed temperature within BED_HYSTERESIS of the target
+#endif
+```
+
+Bed PID (`PIDTEMPBED`) is disabled by default because many beds with solid-state relays or simple MOSFETs work fine with bang-bang. Enable it if your bed temperature oscillates noticeably.
+
+Tune bed PID with:
+
+```
+M303 E-1 C8 S90
+```
+
+This runs 8 cycles targeting 90°C on the bed (heater index `-1`).
+
+## Thermal protection
+
+Thermal runaway protection detects situations where a heater is not performing as expected — usually caused by a loose thermistor, a failing heater cartridge, or a thermistor that has fallen out.
+
+```cpp
+// @section safety (Configuration.h)
+
+#define THERMAL_PROTECTION_HOTENDS // Enable thermal protection for all extruders
+#define THERMAL_PROTECTION_BED     // Enable thermal protection for the heated bed
+#define THERMAL_PROTECTION_CHAMBER // Enable thermal protection for the heated chamber
+#define THERMAL_PROTECTION_COOLER  // Enable thermal protection for the laser cooling
+```
+
+All four options are enabled by default. Never disable them on a production machine.
+
+The detailed thresholds — how many degrees of drift are allowed, over what time period — are configured in `Configuration_adv.h` under `// @section safety`. The defaults are conservative and suitable for most hardware.
+
+## Cold extrusion prevention
+
+Marlin blocks extrusion commands when the hotend is below `EXTRUDE_MINTEMP`:
+
+```cpp
+// @section safety (Configuration.h)
+
+/**
+ * Prevent extrusion if the temperature is below EXTRUDE_MINTEMP.
+ * *** IT IS HIGHLY RECOMMENDED TO LEAVE THIS OPTION ENABLED! ***
+ */
+#define PREVENT_COLD_EXTRUSION
+#define EXTRUDE_MINTEMP 170
+
+/**
+ * Prevent a single extrusion longer than EXTRUDE_MAXLENGTH.
+ * Note: For Bowden Extruders make this large enough to allow load/unload.
+ */
+#define PREVENT_LENGTHY_EXTRUDE
+#define EXTRUDE_MAXLENGTH 200
+```
+
+`EXTRUDE_MINTEMP 170` means any `G1 E...` or `G0 E...` move issued below 170°C is silently ignored. This prevents grinding PLA into a cold nozzle when loading filament or after a failed print.
+
+`EXTRUDE_MAXLENGTH` prevents a runaway extrusion from a bad G-code file by limiting any single E move to 200 mm. For Bowden printers where loading requires pushing filament a long distance, increase this to match your tube length.
+
+Override cold extrusion prevention at runtime with `M302 S<temp>` or `M302 P1` (to allow cold extrusion temporarily for maintenance).
+
+## Temperature settling
+
+Marlin waits for the temperature to stabilize before reporting "ready" in `M109` (wait for hotend) and `M190` (wait for bed) commands:
+
+```cpp
+#define TEMP_RESIDENCY_TIME         10  // (seconds) Time to wait for hotend to "settle" in M109
+#define TEMP_WINDOW                  1  // (°C) Temperature proximity for "temperature reached" timer
+#define TEMP_HYSTERESIS              3  // (°C) Temperature proximity considered "close enough" to target
+
+#define TEMP_BED_RESIDENCY_TIME     10  // (seconds) Time to wait for bed to "settle" in M190
+#define TEMP_BED_WINDOW              1  // (°C) Temperature proximity for "temperature reached" timer
+#define TEMP_BED_HYSTERESIS          3  // (°C) Temperature proximity considered "close enough" to target
+```
+
+With these defaults, `M109 S200` waits until the hotend reaches within 3°C of 200°C, then waits an additional 10 seconds while it stays within 1°C of target. This ensures the thermal mass of the heater block is fully stabilized before printing begins.

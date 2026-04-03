@@ -1,0 +1,90 @@
+---
+title: "Contributing to Marlin"
+description: "How to submit patches, bug reports, and feature requests to the Marlin firmware project."
+---
+
+Marlin is an open-source project maintained by a community of volunteers. Contributions of all kinds are welcome — whether you're fixing a bug, adding a feature, improving documentation, or helping triage issues.
+
+The project lead is [Scott Lahteine (@thinkyhead)](https://github.com/thinkyhead), supported by a team of admins including Peter Ellens, Chris Pepper, Keith Bennett, Roxanne Neufeld, Jason Smith, Victor Oliveira, and Bob Kuhn. Erik van der Zalm is the original founder of the project.
+
+## Branches
+
+Marlin uses a branch structure designed to keep the main release lines stable:
+
+- **`bugfix-2.1.x`** — the primary development branch. All patches and new features target this branch. It is not for production use; it may contain experimental changes.
+- **`lts-x.x.x`** branches — long-term support branches maintained mainly for vendors who need older Marlin versions to remain functional with targeted bug fixes.
+- Release branches (e.g. `2.1.x`) — stable release snapshots. Do **not** target these with your PRs.
+
+## Contribution workflow
+
+<Steps>
+  <Step title="Fork the repository">
+    Go to the [MarlinFirmware/Marlin](https://github.com/MarlinFirmware/Marlin) repository on GitHub and fork it to your own account.
+  </Step>
+  <Step title="Create a branch">
+    Create a branch off of `bugfix-2.1.x` for your change. Use a short, descriptive branch name that relates to the fix or feature.
+
+    ```bash
+    git checkout bugfix-2.1.x
+    git pull upstream bugfix-2.1.x
+    git checkout -b my-fix-description
+    ```
+  </Step>
+  <Step title="Make your changes">
+    Implement your fix or feature. Follow the [coding standards](/contributing/coding-standards) and document new code with clear comments. End all files with a newline.
+  </Step>
+  <Step title="Add build tests">
+    If your change adds new features, add one or more build tests under `buildroot/tests/`. Any test added to a PR will be run automatically on GitHub CI as soon as commits are pushed. Run tests locally first to minimize iteration.
+  </Step>
+  <Step title="Open a pull request">
+    Push your branch and open a Pull Request against `bugfix-2.1.x`. Fill in the PR template completely — include a clear description, any requirements, the benefits of the change, sample configurations if needed, and links to related issues.
+
+    - Use the present tense and imperative mood in commit messages: "Add feature", not "Added feature".
+    - Keep the first line of commit messages to 72 characters or fewer.
+    - Do not include issue numbers in the PR title.
+    - Include screenshots, diagrams, or video links where they help explain the change.
+  </Step>
+</Steps>
+
+<Note>
+  Pull Requests without clear information take longer to review and may be rejected. The maintainers handle a high volume of submissions, so please be patient during the review process.
+</Note>
+
+## Reporting bugs
+
+The [GitHub Issue Queue](https://github.com/MarlinFirmware/Marlin/issues/new/choose) is the right place for bug reports and feature requests. Before filing a new issue:
+
+- Test against the latest `bugfix-2.1.x` branch — the bug may already be fixed.
+- Search existing open and closed issues to avoid duplicates. If you find a closed issue that matches your problem, open a new one and link to the original.
+
+A good bug report includes:
+
+- The exact version and build date of Marlin (visible in the startup message or LCD Info menu).
+- A clear description of the steps to reproduce the problem.
+- What you expected to happen and what actually happened.
+- Your `Configuration.h` and `Configuration_adv.h` files as a ZIP attachment.
+- Detailed log output, especially for probing or leveling issues.
+- Screenshots, videos, or G-code that reliably triggers the problem.
+
+## Requesting features
+
+Feature requests also go through [GitHub Issues](https://github.com/MarlinFirmware/Marlin/issues/new/choose). Before submitting:
+
+- Check [marlinfw.org](https://marlinfw.org) to see if the feature already exists as a configuration option.
+- Search the existing [feature request list](https://github.com/MarlinFirmware/Marlin/issues?q=is%3Aopen+is%3Aissue+label%3A%22T%3A+Feature+Request%22) for duplicates. If your request already exists, add a comment to it rather than opening a new issue.
+
+A good feature request explains what you want, why it would be useful to most Marlin users, and includes examples or references to other firmware that has implemented it.
+
+## Community channels
+
+The Issue Queue is reserved for bugs and feature requests. For configuration help, troubleshooting, and general discussion, use the community channels:
+
+- **[Marlin Discord](https://discord.gg/marlin-firmware-461605380783472640)** — the most active community space for real-time help and development discussion. Use `#general` for questions.
+- **[Facebook: "Marlin Firmware"](https://www.facebook.com/groups/1049718498464482/)** — large community group for user support.
+- **[Facebook: "Marlin Firmware for 3D Printers"](https://www.facebook.com/groups/3Dtechtalk/)** — additional support group.
+- **[RepRap Forum](https://forums.reprap.org/list.php?415)** — the Marlin forum on RepRap.org.
+- **[Marlin Documentation](https://marlinfw.org)** — official documentation site.
+
+## Good first contributions
+
+If you're new to the codebase, look for issues labeled [`good first issue`](https://github.com/MarlinFirmware/Marlin/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or [`help wanted`](https://github.com/MarlinFirmware/Marlin/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22). Beginner issues typically require only a few lines of code. "Help wanted" issues are a bit more involved.

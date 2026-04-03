@@ -1,0 +1,123 @@
+---
+title: "M104/M109 — Hotend temperature"
+description: "Set the hotend target temperature, with or without waiting for the temperature to be reached."
+---
+
+Use **M104** to set a hotend target temperature and return immediately so the printer can continue executing subsequent commands while heating. Use **M109** to set the target and block until the hotend reaches that temperature before continuing.
+
+<Warning>
+  Never set the hotend temperature higher than the rating of your thermistor, PTFE tubing, or hot-end components. Exceeding material limits can cause fires, toxic fumes, or permanent hardware damage.
+</Warning>
+
+## M104 — Set hotend temperature
+
+Sets the target temperature for the specified hotend and returns immediately. The firmware continues heating in the background.
+
+### Syntax
+
+```gcode
+M104 [S<temp>] [T<index>] [I<preset>]
+```
+
+### Parameters
+
+<ParamField path="S" type="float">
+  Target temperature in degrees Celsius. Pass `S0` to turn off the heater.
+</ParamField>
+
+<ParamField path="T" type="int">
+  Tool (extruder) index to heat. If omitted, the currently active tool is used. Zero-indexed.
+</ParamField>
+
+<ParamField path="I" type="int">
+  Material preset index. When `PREHEAT_COUNT` presets are defined in firmware, `I` selects a preset's hotend temperature instead of using `S`. Requires `HAS_PREHEAT` to be enabled.
+</ParamField>
+
+With `AUTOTEMP` enabled, M104 also accepts:
+
+<ParamField path="F" type="float">
+  Autotemp scaling factor. Set a non-zero value to enable auto-temperature mode, where the target is scaled by the current print speed.
+</ParamField>
+
+<ParamField path="B" type="float">
+  Maximum temperature for auto-temperature mode (used as upper bound).
+</ParamField>
+
+### Usage notes
+
+- M104 does **not** wait. Execution continues immediately after the command is sent.
+- If `PRINTJOB_TIMER_AUTOSTART` is enabled, setting a temperature above the threshold starts the print job timer; setting it to 0 stops the timer.
+- With `SINGLENOZZLE_STANDBY_TEMP`, the target is stored per-tool and applied when that tool becomes active.
+- With `DUAL_X_CARRIAGE` in duplication mode, setting `T0` also applies an offset temperature to `T1`.
+
+### Examples
+
+```gcode
+M104 S200       ; Heat hotend 0 to 200°C, return immediately
+M104 S0         ; Turn off hotend heater
+M104 S215 T1    ; Heat hotend 1 to 215°C
+```
+
+---
+
+## M109 — Set hotend temperature and wait
+
+Sets the target temperature and blocks execution until the hotend reaches that temperature (within tolerance). The printer does not execute any further commands until the target is reached.
+
+### Syntax
+
+```gcode
+M109 [S<temp>] [R<temp>] [T<index>] [I<preset>]
+```
+
+### Parameters
+
+<ParamField path="S" type="float">
+  Target temperature in degrees Celsius. With `S`, the firmware waits only when **heating up** — it does not wait if the hotend is already above the target temperature.
+</ParamField>
+
+<ParamField path="R" type="float">
+  Target temperature in degrees Celsius. With `R`, the firmware waits for the hotend to reach the target whether it is heating **or cooling**. Use this when you need the hotend to be at a precise temperature range before printing.
+</ParamField>
+
+<ParamField path="T" type="int">
+  Tool (extruder) index to heat. If omitted, the currently active tool is used. Zero-indexed.
+</ParamField>
+
+<ParamField path="I" type="int">
+  Material preset index. Selects a preset's hotend temperature. Requires `HAS_PREHEAT` to be enabled in firmware.
+</ParamField>
+
+### Usage notes
+
+- `S` waits only when heating. If the nozzle is already hotter than `S<temp>`, execution continues without waiting.
+- `R` waits for both heating and cooling, making it suitable for temperature changes in either direction.
+- You can check the current temperature at any time using M105.
+- If `PRINTJOB_TIMER_AUTOSTART` is enabled, M109 will start the print job timer when heating above the threshold.
+
+### Examples
+
+```gcode
+M109 S205           ; Heat hotend 0 to 205°C and wait
+M109 S205 T0        ; Heat hotend 0 to 205°C and wait (explicit tool)
+M109 R150           ; Wait until hotend 0 is at exactly 150°C (heat or cool)
+M109 S0             ; Turn off hotend and continue (no wait, target is zero)
+```
+
+A typical print-start sequence heats the bed and nozzle together:
+
+```gcode
+M140 S60            ; Start bed heating (non-blocking)
+M104 S200           ; Start hotend heating (non-blocking)
+M190 S60            ; Wait for bed to reach 60°C
+M109 S200           ; Wait for hotend to reach 200°C
+G28                 ; Home all axes
+```
+
+## Related commands
+
+- M105 — Report current temperatures
+- [M140/M190](/gcode/temperature/M140-M190) — Set bed temperature
+- M106/M107 — Set/turn off part-cooling fan
+- M301 — Set hotend PID values (P, I, D)
+- [M303](/gcode/temperature/M303) — PID autotune

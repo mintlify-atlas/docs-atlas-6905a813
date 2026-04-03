@@ -1,0 +1,296 @@
+---
+title: "Bed leveling configuration"
+description: "Enable and configure Bilinear ABL, Unified Bed Leveling (UBL), or Mesh Bed Leveling in Marlin's Configuration.h."
+---
+
+Marlin supports several bed leveling strategies, each suited to different hardware and accuracy requirements. You choose one method and configure it in the `// @section calibrate` block of `Configuration.h` (starting around line 2131).
+
+<Note>
+Only one leveling method can be active at a time. Uncomment exactly one of the `AUTO_BED_LEVELING_*` or `MESH_BED_LEVELING` defines.
+</Note>
+
+## Available methods
+
+```cpp
+// @section calibrate
+
+//#define AUTO_BED_LEVELING_3POINT
+//#define AUTO_BED_LEVELING_LINEAR
+//#define AUTO_BED_LEVELING_BILINEAR
+//#define AUTO_BED_LEVELING_UBL
+//#define MESH_BED_LEVELING
+```
+
+| Method | Requires probe | Grid | Best for |
+|---|---|---|---|
+| `AUTO_BED_LEVELING_3POINT` | Yes | No | Flat beds, fast homing |
+| `AUTO_BED_LEVELING_LINEAR` | Yes | Yes | Flat beds with a gradient |
+| `AUTO_BED_LEVELING_BILINEAR` | Yes | Yes | Large or uneven beds |
+| `AUTO_BED_LEVELING_UBL` | Yes (or manual) | Yes | Most accurate; stores mesh in EEPROM |
+| `MESH_BED_LEVELING` | No | Yes | Printers without a probe |
+
+<Tabs>
+  <Tab title="Bilinear ABL">
+    Bilinear Auto Bed Leveling probes a rectangular grid of points and interpolates a smooth correction surface. It's the most common choice for printers with an inductive sensor, BLTouch, or CR Touch.
+
+    ```cpp
+    #define AUTO_BED_LEVELING_BILINEAR
+    ```
+
+    ### Grid configuration
+
+    ```cpp
+    #if ANY(AUTO_BED_LEVELING_LINEAR, AUTO_BED_LEVELING_BILINEAR)
+
+      // Set the number of grid points per dimension.
+      #define GRID_MAX_POINTS_X 3
+      #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+
+      #if ENABLED(AUTO_BED_LEVELING_BILINEAR)
+        // Beyond the probed grid, continue the implied tilt?
+        //#define EXTRAPOLATE_BEYOND_GRID
+
+        // Subdivision of the grid by Catmull-Rom method.
+        //#define ABL_BILINEAR_SUBDIVISION
+        #if ENABLED(ABL_BILINEAR_SUBDIVISION)
+          #define BILINEAR_SUBDIVISIONS 3
+        #endif
+      #endif
+
+    #endif
+    ```
+
+    `GRID_MAX_POINTS_X` sets the number of probe points along each axis. With the default of `3`, Marlin probes a 3×3 = 9 point grid. For a larger bed or one with more surface variation, increase to `5` (25 points) or `7` (49 points).
+
+    `ABL_BILINEAR_SUBDIVISION` adds Catmull-Rom interpolation between probe points, synthesizing a finer mesh without extra probing time. `BILINEAR_SUBDIVISIONS 3` creates 3 synthetic points between each pair of real points.
+
+    ### Running the leveling routine
+
+    After enabling, run `G29` to probe the grid. The result is stored in RAM (and EEPROM if `EEPROM_SETTINGS` is enabled). Leveling is applied automatically to all subsequent moves.
+
+    ```
+    G28        ; Home all axes
+    G29        ; Probe the bed
+    M500       ; Save to EEPROM
+    ```
+  </Tab>
+  <Tab title="Unified Bed Leveling (UBL)">
+    UBL is Marlin's most capable leveling system. It combines automatic probing, manual adjustment, mesh editing, and persistent storage in a single cohesive workflow. UBL stores the mesh in an EEPROM slot so you don't need to re-probe every print.
+
+    ```cpp
+    #define AUTO_BED_LEVELING_UBL
+    ```
+
+    ### Grid configuration
+
+    ```cpp
+    #elif ENABLED(AUTO_BED_LEVELING_UBL)
+
+      //#define MESH_EDIT_GFX_OVERLAY   // Display a graphics overlay while editing the mesh
+
+      #define MESH_INSET 1              // Set Mesh bounds as an inset region of the bed
+      #define GRID_MAX_POINTS_X 10      // Don't use more than 15 points per axis
+      #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+
+      //#define UBL_HILBERT_CURVE       // Use Hilbert distribution for less travel when probing
+
+      #define UBL_MESH_EDIT_MOVES_Z     // Sophisticated users prefer no movement of nozzle
+      #define UBL_SAVE_ACTIVE_ON_M500   // Save the currently active mesh in the current slot on M500
+
+    #endif
+    ```
+
+    `GRID_MAX_POINTS_X 10` creates a 10×10 = 100 point mesh. UBL supports up to 15 points per axis (225 points total), but 10×10 is sufficient for most printers. The mesh is saved in EEPROM and reloaded at boot.
+
+    `MESH_INSET` keeps probe points away from the bed edge. With `MESH_INSET 1`, the mesh boundary starts 1 mm inside the bed edge.
+
+    ### Initial setup
+
+    UBL uses a multi-step workflow:
+
+    <Steps>
+      <Step title="Home and generate mesh">
+        ```
+        G28         ; Home all axes
+        G29 P1      ; Probe the entire bed automatically
+        ```
+      </Step>
+      <Step title="Fill in unreachable areas">
+        ```
+        G29 P3      ; Extrapolate points the probe couldn't reach
+        ```
+      </Step>
+      <Step title="Fine-tune with manual adjustment">
+        ```
+        G29 P4 R999 T   ; Interactively adjust all mesh points
+        ```
+      </Step>
+      <Step title="Save the mesh">
+        ```
+        G29 S1      ; Save mesh to EEPROM slot 1
+        M500        ; Save all settings
+        ```
+      </Step>
+      <Step title="Load on future boots">
+        ```
+        G28
+        G29 L1      ; Load mesh from slot 1
+        G29 A       ; Activate leveling
+        ```
+      </Step>
+    </Steps>
+
+    UBL also supports tilting the mesh with `G29 J` to compensate for gantry tilt without re-probing the full grid, which is much faster when the bed hasn't moved but the gantry was removed.
+  </Tab>
+  <Tab title="Mesh Bed Leveling (MBL)">
+    Mesh Bed Leveling works without a probe. You manually lower the nozzle to each grid point and tell Marlin the height at that point. This is the right choice for printers that have no probe hardware.
+
+    ```cpp
+    #define MESH_BED_LEVELING
+    ```
+
+    ### Grid configuration
+
+    ```cpp
+    #elif ENABLED(MESH_BED_LEVELING)
+
+      #define MESH_INSET 10          // Set Mesh bounds as an inset region of the bed
+      #define GRID_MAX_POINTS_X 3
+      #define GRID_MAX_POINTS_Y GRID_MAX_POINTS_X
+
+    #endif
+    ```
+
+    With `GRID_MAX_POINTS_X 3`, Marlin guides you through 9 points. `MESH_INSET 10` keeps the grid 10 mm away from each edge.
+
+    ### LCD-guided procedure
+
+    Enable the LCD interface to get a guided step-by-step procedure:
+
+    ```cpp
+    //#define LCD_BED_LEVELING
+
+    #if ENABLED(LCD_BED_LEVELING)
+      #define MESH_EDIT_Z_STEP  0.025 // (mm) Step size while manually probing Z axis.
+      #define LCD_PROBE_Z_RANGE 4     // (mm) Z Range centered on Z_MIN_POS for LCD Z adjustment
+    #endif
+    ```
+
+    With `LCD_BED_LEVELING`, `G29` displays prompts on the LCD, moves to each grid point, and lets you adjust Z height with the encoder knob until a piece of paper slides with slight resistance.
+  </Tab>
+</Tabs>
+
+## Probe configuration
+
+All automatic leveling methods require a Z probe. The probe type is selected in the `// @section probes` block.
+
+### Probe type
+
+```cpp
+// @section probes
+
+//#define PROBE_MANUALLY     // No probe hardware - uses G29 repeated movement
+//#define FIX_MOUNTED_PROBE  // Inductive probe or nozzle-based probe-switch
+//#define NOZZLE_AS_PROBE    // Conductive nozzle or piezo-electric smart effector
+//#define BLTOUCH            // BLTouch Hall effect sensor probe
+```
+
+Uncomment exactly one probe type.
+
+### Nozzle-to-probe offset
+
+`NOZZLE_TO_PROBE_OFFSET` defines where the probe tip is relative to the nozzle. This is critical — if the offset is wrong, the leveled surface won't correspond to where the nozzle actually prints.
+
+```cpp
+/**
+ * Nozzle-to-Probe offsets { X, Y, Z }
+ *
+ * X and Y offset: distance from nozzle tip to probe trigger-point.
+ * Z offset: use your best known value and adjust at runtime.
+ * Common probes trigger below the nozzle and have negative Z offset.
+ */
+#define NOZZLE_TO_PROBE_OFFSET { 10, 10, 0 } // (mm) X, Y, Z
+```
+
+- **X/Y**: measure with a caliper. Positive X means the probe is to the right of the nozzle.
+- **Z**: the height difference between where the probe triggers and where the nozzle touches the bed. Most probes trigger slightly below nozzle height, giving a negative Z value like `-1.5`.
+
+Tune and adjust the Z offset at runtime with `M851 Z<value>`. Save with `M500`.
+
+### Probing margins and speed
+
+```cpp
+// Most probes should stay away from the edges of the bed.
+#define PROBING_MARGIN 10
+
+// X and Y axis travel speed between probes.
+#define XY_PROBE_FEEDRATE    (133*60) // (mm/min)
+
+// Feedrate for the first approach when double-probing
+#define Z_PROBE_FEEDRATE_FAST  (4*60) // (mm/min)
+
+// Feedrate for the "accurate" probe of each point
+#define Z_PROBE_FEEDRATE_SLOW (Z_PROBE_FEEDRATE_FAST / 2) // (mm/min)
+```
+
+`PROBING_MARGIN 10` keeps probe points 10 mm away from the bed edge. Reduce this if your bed is small and the edge points matter, but never set it so low that the probe travels off the bed.
+
+## BLTouch configuration
+
+When `BLTOUCH` is enabled in `Configuration.h`, additional options in `Configuration_adv.h` let you fine-tune the probe behavior:
+
+```cpp
+// @section bltouch (Configuration_adv.h)
+
+#if ENABLED(BLTOUCH)
+  // Minimum command delay (ms). Enable and increase if needed.
+  //#define BLTOUCH_DELAY 500
+
+  // V3.0 or 3.1: Set default mode to 5V at Marlin startup.
+  //#define BLTOUCH_SET_5V_MODE
+
+  // Enable "HIGH SPEED" option for probing.
+  // Danger: Disable if your probe sometimes fails.
+  //#define BLTOUCH_HS_MODE true
+
+  #ifdef BLTOUCH_HS_MODE
+    #define BLTOUCH_HS_EXTRA_CLEARANCE  7  // Extra Z Clearance
+  #endif
+#endif
+```
+
+<Warning>
+`BLTOUCH_SET_5V_MODE` must only be enabled if your control board's signal pin is 5V tolerant. On 3.3V boards (most 32-bit boards), use OD (open drain) mode — the BLTouch default — to avoid damaging the MCU.
+</Warning>
+
+`BLTOUCH_HS_MODE` enables high-speed probing where the probe does not fully retract between points. This significantly reduces leveling time on dense grids but can cause probe errors on systems with noisy wiring or slow mechanics.
+
+## Leveling fade height
+
+For all mesh-based methods (Bilinear, UBL, MBL), Marlin can gradually reduce the leveling correction as Z height increases, fading it out entirely at a specified height:
+
+```cpp
+#if ANY(MESH_BED_LEVELING, AUTO_BED_LEVELING_BILINEAR, AUTO_BED_LEVELING_UBL)
+  #define ENABLE_LEVELING_FADE_HEIGHT
+  #if ENABLED(ENABLE_LEVELING_FADE_HEIGHT)
+    #define DEFAULT_LEVELING_FADE_HEIGHT 10.0 // (mm) Default fade height.
+  #endif
+#endif
+```
+
+With `DEFAULT_LEVELING_FADE_HEIGHT 10.0`, the full correction is applied at layer 0 and linearly fades to zero by Z = 10 mm. This prevents overcorrection on large prints where the bed surface matters less at height. Set with `M420 Z<height>` at runtime.
+
+## Restoring leveling after homing
+
+By default, `G28` (home) disables leveling. You can change this behavior:
+
+```cpp
+//#define RESTORE_LEVELING_AFTER_G28   // Restore the prior leveling state after homing
+//#define ENABLE_LEVELING_AFTER_G28    // Always enable leveling after homing
+```
+
+`RESTORE_LEVELING_AFTER_G28` is the more conservative option — it re-enables leveling only if it was active before homing. Use `ENABLE_LEVELING_AFTER_G28` if you want leveling always enabled after a home.
+
+---
+
+For guidance on running the leveling routines, interpreting mesh results, and using G-codes like `G29`, `M420`, and `M421`, see the [bed leveling operational guide](/features/bed-leveling).

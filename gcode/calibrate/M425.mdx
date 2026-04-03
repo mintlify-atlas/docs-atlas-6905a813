@@ -1,0 +1,155 @@
+---
+title: "M425 — Backlash compensation"
+description: "Enable and configure backlash compensation to correct for mechanical play in each axis"
+---
+
+M425 configures backlash compensation, which corrects for the small amount of slack (mechanical play) present in every lead screw, belt, and gear train. When the toolhead changes direction on an axis, the motor must first take up this slack before the carriage actually moves. Without compensation, direction changes produce small positional errors that appear as ringing, ghosting, or dimensional inaccuracy in prints.
+
+<Note>
+  M425 requires `BACKLASH_GCODE` to be enabled in `Configuration_adv.h`. The related `BACKLASH_COMPENSATION` option enables the correction engine itself, and `BACKLASH_SMOOTHING_MM` enables the `S` parameter for smooth fade-in of corrections.
+</Note>
+
+## Syntax
+
+```gcode
+M425 [F<fraction>] [S<mm>] [X<mm>] [Y<mm>] [Z<mm>]
+```
+
+Run `M425` with no arguments to display the current backlash compensation state.
+
+## Parameters
+
+<ParamField path="F" type="float">
+  Correction fraction — how much of the measured backlash distance to apply as a correction (0.0 to 1.0).
+
+  - `F1.0` — full correction (apply 100% of the backlash distance on every direction change)
+  - `F0.5` — half correction
+  - `F0.0` — disable compensation entirely
+
+  If you are unsure, start with `F1.0` and reduce it only if you observe overcorrection artifacts.
+</ParamField>
+
+<ParamField path="X" type="float">
+  Backlash distance for the X axis in mm. Set to `0` to disable X compensation. If you pass `X` without a value and `MEASURE_BACKLASH_WHEN_PROBING` is enabled, the last measured backlash value for X is copied in.
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Backlash distance for the Y axis in mm. Set to `0` to disable Y compensation. Accepts a measured value the same way as `X`.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Backlash distance for the Z axis in mm. Set to `0` to disable Z compensation. Accepts a measured value the same way as `X`.
+</ParamField>
+
+<ParamField path="S" type="float">
+  Smoothing distance in mm (requires `BACKLASH_SMOOTHING_MM`). Instead of applying the entire backlash correction as a single step at the moment of direction change, the correction is spread over this distance. Larger values produce a smoother transition but reduce correction accuracy. A value of `0` disables smoothing and applies the correction immediately.
+</ParamField>
+
+## What backlash is
+
+Every mechanical drive system has a small amount of play — the gap between mating teeth on a gear, the thread clearance in a lead screw nut, or the stretch in a belt under load. When the motor reverses direction it must travel through this gap before the carriage starts moving.
+
+For a printer this means:
+
+- Moving in the +X direction: carriage follows the motor
+- Reversing to -X: motor turns but the carriage does not move until all the slack is taken up
+
+The total distance the motor must travel before the carriage responds is the **backlash distance**. Backlash compensation moves the motor an extra amount equal to this distance each time an axis changes direction, so the carriage arrives at the correct position.
+
+## Measuring backlash on each axis
+
+<Steps>
+  <Step title="Print a backlash calibration object">
+    Print a simple calibration square or two overlapping rectangles. The amount by which the inner corners shift or the walls bow inward on reversal gives you a visual estimate of backlash.
+  </Step>
+
+  <Step title="Measure with a dial indicator (preferred)">
+    Mount a dial indicator against the toolhead carriage. Command a 10 mm move in the positive direction, zero the indicator, then command a 10 mm move in the negative direction. The difference between the commanded distance and the actual carriage travel is your backlash value.
+
+    ```gcode
+    G91             ; Relative positioning
+    G1 X10 F1000    ; Move 10 mm in +X
+    G1 X-10 F1000   ; Move 10 mm in -X (note indicator reading)
+    G90             ; Back to absolute
+    ```
+  </Step>
+
+  <Step title="Enable automatic measurement (optional)">
+    If `MEASURE_BACKLASH_WHEN_PROBING` is enabled, Marlin automatically measures backlash on each axis during G29 bed leveling. After leveling, run M425 with a bare axis letter (no value) to copy the measured result into the active setting:
+
+    ```gcode
+    M425 X Y Z
+    ```
+  </Step>
+
+  <Step title="Apply the measured values">
+    Set the backlash distance and enable full correction:
+
+    ```gcode
+    M425 F1.0 X0.08 Y0.12 Z0.00
+    ```
+  </Step>
+
+  <Step title="Save to EEPROM">
+    Persist the settings across power cycles with M500:
+
+    ```gcode
+    M500
+    ```
+  </Step>
+</Steps>
+
+## Viewing current settings
+
+Run M425 with no arguments to print the active state:
+
+```gcode
+M425
+```
+
+Output example:
+
+```text
+Backlash Correction active:
+  Correction Amount/Fade-out:     F0.80 (F1.0 = full, F0.0 = none)
+  Backlash Distance (mm):         X0.08 Y0.12 Z0.00
+  Smoothing (mm):                 S3.00
+```
+
+## Examples
+
+Enable full correction with measured values for X and Y:
+
+```gcode
+M425 F1.0 X0.08 Y0.12
+```
+
+Apply 80% correction with a 3 mm smoothing distance:
+
+```gcode
+M425 F0.8 S3.0
+```
+
+Copy automatically measured backlash values into active settings (requires `MEASURE_BACKLASH_WHEN_PROBING`):
+
+```gcode
+M425 X Y Z
+```
+
+Disable backlash compensation:
+
+```gcode
+M425 F0
+```
+
+Save current backlash settings to EEPROM:
+
+```gcode
+M425 F1.0 X0.05 Y0.10
+M500
+```
+
+## Related commands
+
+- [M500–M504 — EEPROM operations](/gcode/eeprom/M500-M504) — Save, restore, and reset settings
+- G29 — Bed leveling (can measure backlash with `MEASURE_BACKLASH_WHEN_PROBING`)

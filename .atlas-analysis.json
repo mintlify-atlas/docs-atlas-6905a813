@@ -1,28 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Marlin Firmware",
+  "projectType": "general",
+  "projectName": "Marlin Firmware",
+  "projectDescription": "Open-source 3D printer firmware optimized for both 8-bit AVR and 32-bit ARM microcontrollers, powering RepRap and many commercial printers.",
   "theme": "aspen",
-  "colors": {
-    "primary": "#0404fc",
-    "light": "#260895",
-    "dark": "#8c7cc4"
-  },
-  "favicon": "https://media.brand.dev/99859280-2084-4670-a7db-d5e9793dbbd4.png",
-  "logo": {
-    "light": "https://media.brand.dev/f4607bdc-788d-49a0-9ec7-b0613c3b7757.svg",
-    "dark": "https://media.brand.dev/f4607bdc-788d-49a0-9ec7-b0613c3b7757.svg"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/MarlinFirmware/Marlin"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/MarlinFirmware/Marlin"
-    }
-  },
+  "primaryColor": "#0404fc",
+  "lightColor": "#260895",
+  "darkColor": "#8c7cc4",
   "navigation": {
     "tabs": [
       {
@@ -120,5 +103,35 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Supports 8-bit AVR and 32-bit ARM microcontrollers via Hardware Abstraction Layer (HAL)",
+    "Comprehensive G-code command set for motion, temperature, bed leveling, and calibration",
+    "Automatic bed leveling (Bilinear, UBL, Mesh) for improved print quality",
+    "Multi-extruder support with up to 8 extruders and 9 coordinated axes",
+    "Power-loss recovery to resume prints after power failure",
+    "Filament runout sensor support",
+    "Wide LCD and display controller support",
+    "TMC stepper driver integration with StealthChop and CoolStep",
+    "Built-in simulator for Windows, macOS, and Linux",
+    "PlatformIO and Arduino IDE build system support"
+  ],
+  "publicApiSurface": [
+    "G0/G1 — Linear move",
+    "G2/G3 — Arc move",
+    "G28 — Auto home",
+    "G29 — Bed leveling",
+    "G33 — Delta auto calibration",
+    "M104/M109 — Set/wait for hotend temperature",
+    "M140/M190 — Set/wait for bed temperature",
+    "M303 — PID autotune",
+    "M420 — Bed leveling state",
+    "M500-M504 — EEPROM operations",
+    "M92 — Steps per unit",
+    "M200-M205 — Motion settings",
+    "M425 — Backlash compensation",
+    "M48 — Probe repeatability test",
+    "Configuration.h — Basic firmware settings",
+    "Configuration_adv.h — Advanced firmware settings"
+  ]
 }

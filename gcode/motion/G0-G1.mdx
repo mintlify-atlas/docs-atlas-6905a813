@@ -1,0 +1,105 @@
+---
+title: "G0/G1 — Linear move"
+description: "Move to a position, optionally extruding filament"
+---
+
+G0 and G1 are the primary motion commands in Marlin. Both move the toolhead in a straight line to the destination coordinates. G1 is the standard linear move used during printing; G0 is conventionally a rapid (non-printing) move, though in Marlin both commands use the same underlying motion path and both respect the active feedrate.
+
+<Note>
+  In Marlin, G0 and G1 share the same handler (`G0_G1`). The only difference is that when `G0_FEEDRATE` is defined in firmware configuration, G0 uses a dedicated rapid feedrate instead of the current motion feedrate.
+</Note>
+
+## Syntax
+
+```gcode
+G0 [X<pos>] [Y<pos>] [Z<pos>] [E<pos>] [F<rate>]
+G1 [X<pos>] [Y<pos>] [Z<pos>] [E<pos>] [F<rate>]
+```
+
+## Parameters
+
+<ParamField path="X" type="float">
+  Target X position in mm (or inches if `INCH_MODE_SUPPORT` is enabled and active). Omit to keep the current X position.
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Target Y position in mm. Omit to keep the current Y position.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Target Z position in mm. Omit to keep the current Z position.
+</ParamField>
+
+<ParamField path="E" type="float">
+  Target extruder position in mm. In absolute mode (G90/M82) this is the absolute filament position; in relative mode (G91/M83) it is the amount to extrude or retract.
+</ParamField>
+
+<ParamField path="F" type="float">
+  Feedrate in mm/min. This value is saved as the new current feedrate and applies to this move and all subsequent moves until changed.
+</ParamField>
+
+## Usage notes
+
+**Absolute vs. relative positioning**
+
+By default Marlin starts in absolute positioning mode (G90). In this mode, X, Y, Z, and E coordinates are interpreted as positions in the machine coordinate space. Switch to relative mode with G91 so that all coordinates are treated as offsets from the current position.
+
+The E axis can be controlled independently of the XYZ mode using M82 (absolute E) or M83 (relative E).
+
+**Feedrate**
+
+The feedrate set by `F` is in mm/min and is retained across moves. You do not need to repeat `F` on every line — only when you want to change the speed.
+
+**G0 rapid move**
+
+When the firmware is compiled with `G0_FEEDRATE` defined, G0 uses that feedrate value instead of the current motion feedrate. If `VARIABLE_G0_FEEDRATE` is also enabled, you can set the G0 feedrate by including `F` on a G0 command and it will be remembered for subsequent G0 moves.
+
+**Autoretract**
+
+When `FWRETRACT` and `FWRETRACT_AUTORETRACT` are enabled and M209 autoretract is active, an E-only G1 move within the configured retract distance range is automatically converted to a firmware retract/recover command.
+
+## Examples
+
+Move to X=10, Y=20 at 3000 mm/min:
+
+```gcode
+G1 X10 Y20 F3000
+```
+
+Extrude 5 mm of filament while moving to X=50:
+
+```gcode
+G1 X50 E5 F1500
+```
+
+Move the Z axis up 10 mm without extruding (rapid move):
+
+```gcode
+G0 Z10
+```
+
+Home, then move to the center of a 220×220 bed and prime the nozzle:
+
+```gcode
+G28          ; Home all axes
+G1 X110 Y110 Z5 F6000   ; Move to center, 5mm above bed
+G1 Z0.2 F600            ; Lower to print height
+G1 X150 E8 F1200        ; Extrude a priming line
+```
+
+Retract 2 mm of filament (relative E mode):
+
+```gcode
+M83          ; Relative E
+G1 E-2 F1800
+```
+
+## Related commands
+
+- [G2/G3 — Arc move](/gcode/motion/G2-G3)
+- [G28 — Auto home](/gcode/motion/G28)
+- [G90/G91 — Absolute/relative positioning](/gcode/motion/G90-G91)
+- G92 — Set current position
+- M82 — Set E to absolute mode
+- M83 — Set E to relative mode
+- M220 — Set feedrate percentage

@@ -1,0 +1,123 @@
+---
+title: "Power-loss recovery"
+description: "Resume SD card prints after an unexpected power failure by saving print state at each layer."
+---
+
+Power-loss recovery (PLR) allows Marlin to resume an interrupted SD card print after a power failure or accidental reset. At each layer change, Marlin writes the current machine state — position, temperatures, fan speeds, feedrate, file position, and more — to a recovery file on the SD card. If the printer restarts and finds a valid recovery file, it offers to resume the print from the last saved layer.
+
+<Warning>
+Power-loss recovery requires an SD card. The feature saves state to a file named `/PLR` on the card. It does not work with USB flash drives or prints streamed over serial.
+</Warning>
+
+## How it works
+
+The `PrintJobRecovery` class in `src/feature/powerloss.cpp` manages the recovery lifecycle:
+
+1. **Saving state** — At each layer (detected by a minimum Z change), `PrintJobRecovery::save()` writes a `job_recovery_info_t` struct to `/PLR` on the SD card. The struct captures: XYZ + E position, feedrate, feed rate percentage, flow percentage, target temperatures for the hot end, bed and chamber, fan speeds, leveling fade height, bed leveling state, the SD filename, and the byte offset into the file.
+
+2. **Detecting a power-loss pin** — If `POWER_LOSS_PIN` is defined, Marlin polls that pin in the main loop. When it reads `POWER_LOSS_STATE` three times consecutively, it calls `PrintJobRecovery::_outage()`, which immediately saves state and (if `BACKUP_POWER_SUPPLY` is enabled) retracts the filament and raises Z before power dies completely.
+
+3. **Recovery on boot** — At startup, `PrintJobRecovery::check()` looks for a valid `/PLR` file. If found and valid (matching head/foot checksums and the original print file still present on the card), the LCD prompts you to resume or cancel the print.
+
+4. **Resuming** — `PrintJobRecovery::resume()` restores temperatures, re-homes if needed, moves back to the saved XY position, lowers to the saved Z, and continues reading the G-code file from the saved byte offset.
+
+## Configuration
+
+Enable power-loss recovery in `Configuration_adv.h`:
+
+```cpp
+// Configuration_adv.h
+//#define POWER_LOSS_RECOVERY
+#if ENABLED(POWER_LOSS_RECOVERY)
+  #define PLR_ENABLED_DEFAULT       false // Start disabled; enable with M413 S1 + M500
+
+  // Optional: reheat the bed on reboot to prevent warping before the resume prompt
+  //#define PLR_HEAT_BED_ON_REBOOT
+  //#define PLR_HEAT_BED_EXTRA          0 // (°C) Extra bed temp above saved value
+  //#define PLR_BED_THRESHOLD BED_MAXTEMP // (°C) Skip confirmation above this temp
+
+  // Pin-based outage detection
+  //#define POWER_LOSS_PIN             44 // Pin number; -1 to disable
+  //#define POWER_LOSS_STATE         HIGH // Logic level that signals power loss
+  //#define POWER_LOSS_PULLUP             // Enable internal pullup
+  //#define POWER_LOSS_PULLDOWN           // Enable internal pulldown
+
+  // Raise Z on outage (requires BACKUP_POWER_SUPPLY)
+  //#define POWER_LOSS_ZRAISE        2    // (mm)
+
+  // Purge a small amount of filament after resuming
+  //#define POWER_LOSS_PURGE_LEN    20    // (mm)
+
+  // Minimum Z change between saves (reduces SD card wear in vase mode)
+  #define POWER_LOSS_MIN_Z_CHANGE    0.05 // (mm)
+
+  // Retract on outage (requires BACKUP_POWER_SUPPLY)
+  //#define BACKUP_POWER_SUPPLY
+  #if ENABLED(BACKUP_POWER_SUPPLY)
+    //#define POWER_LOSS_RETRACT_LEN   10 // (mm)
+  #endif
+
+  // Re-home Z before resuming (almost never needed)
+  //#define POWER_LOSS_RECOVER_ZHOME
+  #if ENABLED(POWER_LOSS_RECOVER_ZHOME)
+    //#define POWER_LOSS_ZHOME_POS { 0, 0 } // Safe XY for Z homing
+  #endif
+#endif
+```
+
+### Key options explained
+
+| Option | Description |
+|--------|-------------|
+| `PLR_ENABLED_DEFAULT` | Whether PLR is active immediately after flashing. Set to `true` for always-on, or `false` to require `M413 S1` at runtime. |
+| `POWER_LOSS_PIN` | A digital input pin connected to a power-loss detection module (e.g., a capacitor-backed circuit that pulls HIGH when mains power drops). |
+| `POWER_LOSS_STATE` | The logic level on `POWER_LOSS_PIN` that indicates power has been lost. |
+| `POWER_LOSS_ZRAISE` | How far to raise Z (mm) immediately on detecting power loss. Requires `BACKUP_POWER_SUPPLY` to have power for the motors. Default is `2` mm. |
+| `POWER_LOSS_MIN_Z_CHANGE` | Marlin only writes a new recovery record when Z has changed by at least this amount. This prevents excessive SD card writes on prints with very thin layers or vase-mode spiraling. Default is `0.05` mm. |
+| `POWER_LOSS_PURGE_LEN` | After resuming, Marlin extrudes this length of filament to clear any ooze before continuing the print. |
+| `PLR_HEAT_BED_ON_REBOOT` | Starts heating the bed immediately on boot (before showing the resume prompt) to reduce the chance of the print detaching while waiting. |
+
+## M413 — enable/disable power-loss recovery
+
+Use `M413` to toggle PLR at runtime:
+
+```gcode
+M413 S1   ; Enable power-loss recovery
+M413 S0   ; Disable power-loss recovery
+M413      ; Report current state
+```
+
+Persist the setting with `M500`:
+
+```gcode
+M413 S1
+M500
+```
+
+## Recovery process after a power failure
+
+<Steps>
+  <Step title="Power is restored">
+    Turn the printer back on. Marlin boots normally and checks for a `/PLR` recovery file on the SD card.
+  </Step>
+
+  <Step title="Resume prompt appears">
+    If a valid recovery file is found and the original print file is still on the SD card, the LCD displays a prompt to resume or cancel the interrupted print.
+  </Step>
+
+  <Step title="Temperatures are restored">
+    When you confirm the resume, Marlin sets the hot end and bed temperatures from the saved state and waits for them to reach the target values.
+  </Step>
+
+  <Step title="Nozzle returns to position">
+    The printer homes (if configured to do so), moves to the saved XY position at a safe Z height, then lowers to the saved Z position where the print was interrupted.
+  </Step>
+
+  <Step title="Print continues">
+    Marlin seeks to the saved byte offset in the G-code file and continues printing from that point. If `POWER_LOSS_PURGE_LEN` is set, a short purge move is made first to prime the nozzle.
+  </Step>
+</Steps>
+
+<Note>
+If you cancel the resume from the LCD, Marlin calls `PrintJobRecovery::cancel()`, which deletes the `/PLR` file so it will not appear again on the next boot.
+</Note>

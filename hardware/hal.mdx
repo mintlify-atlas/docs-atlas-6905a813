@@ -1,0 +1,206 @@
+---
+title: "Hardware Abstraction Layer (HAL)"
+description: "How Marlin's HAL provides a unified API for motion, I/O, and timers across all supported platforms."
+---
+
+Marlin's Hardware Abstraction Layer (HAL) gives the rest of the firmware a single, consistent API regardless of the underlying microcontroller. Whether you are building for an 8-bit ATmega2560 or a 32-bit STM32H743, Marlin calls the same functions for stepping motors, reading analog inputs, setting PWM outputs, and managing timers. The HAL translates those calls into the correct platform-specific operations.
+
+## Directory structure
+
+All HAL code lives in `Marlin/src/HAL/`. The directory contains one subdirectory per supported platform plus shared infrastructure:
+
+```
+Marlin/src/HAL/
+├── AVR/             # Arduino AVR (ATmega)
+├── DUE/             # Arduino Due (SAM3X8E)
+├── ESP32/           # Espressif ESP32
+├── GD32_MFL/        # GD32 via MFL framework
+├── HC32/            # HC32 (Huazhou) ARM Cortex-M4
+├── LINUX/           # Linux native GPIO target
+├── LPC1768/         # NXP LPC1768 ARM Cortex-M3
+├── NATIVE_SIM/      # Desktop simulator
+├── RP2040/          # Raspberry Pi RP2040
+├── SAMD21/          # Atmel SAMD21 ARM Cortex-M0+
+├── SAMD51/          # Atmel SAMD51 ARM Cortex-M4
+├── STM32/           # STM32 via Arduino STM32 framework
+├── STM32F1/         # STM32F1 via libmaple framework
+├── TEENSY31_32/     # Teensy 3.1 / 3.2
+├── TEENSY35_36/     # Teensy 3.5 / 3.6
+├── TEENSY40_41/     # Teensy 4.0 / 4.1
+├── shared/          # Code shared across multiple HALs
+├── HAL.h            # Common HAL entry point
+└── platforms.h      # Platform detection macros
+```
+
+## How the HAL is selected
+
+### `platforms.h` — platform detection
+
+`platforms.h` inspects compiler-defined macros to determine the active platform and sets the `HAL_PATH` macro accordingly. This macro is used throughout the build to resolve `#include HAL_PATH(...)` directives to the correct subdirectory.
+
+```cpp
+// Marlin/src/HAL/platforms.h (abridged)
+#ifdef __AVR__
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/AVR/NAME)
+#elif defined(ARDUINO_ARCH_SAM)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/DUE/NAME)
+#elif defined(__MK20DX256__)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/TEENSY31_32/NAME)
+#elif defined(TARGET_LPC1768)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/LPC1768/NAME)
+#elif defined(ARDUINO_ARCH_HC32)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/HC32/NAME)
+#elif defined(ARDUINO_ARCH_MFL)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/GD32_MFL/NAME)
+#elif defined(__STM32F1__) || defined(TARGET_STM32F1)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/STM32F1/NAME)
+#elif defined(ARDUINO_ARCH_STM32)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/STM32/NAME)
+#elif defined(ARDUINO_ARCH_ESP32)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/ESP32/NAME)
+#elif defined(__PLAT_LINUX__)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/LINUX/NAME)
+#elif defined(__PLAT_NATIVE_SIM__)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/NATIVE_SIM/NAME)
+#elif defined(__SAMD51__)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/SAMD51/NAME)
+#elif defined(__SAMD21__)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/SAMD21/NAME)
+#elif defined(__PLAT_RP2040__)
+  #define HAL_PATH(PATH, NAME) XSTR(PATH/HAL/RP2040/NAME)
+#else
+  #error "Unsupported Platform!"
+#endif
+```
+
+### `HAL.h` — the common entry point
+
+`HAL.h` at the top of `src/HAL/` is the single header that the rest of Marlin includes. It first includes `platforms.h` to resolve `HAL_PATH`, then uses that macro to pull in the platform-specific `HAL.h`:
+
+```cpp
+// Marlin/src/HAL/HAL.h
+#include "platforms.h"
+#include HAL_PATH(.., HAL.h)
+extern MarlinHAL hal;
+```
+
+Every platform-specific `HAL.h` defines a `MarlinHAL` class. The global `hal` instance is what the rest of the firmware calls. For example, `Marlin/src/HAL/STM32/HAL.h` defines:
+
+```cpp
+// In HAL/STM32/HAL.h (abridged)
+#define CPU_32_BIT
+typedef int32_t pin_t;
+
+#define CRITICAL_SECTION_START()  const bool irqon = !__get_PRIMASK(); __disable_irq()
+#define CRITICAL_SECTION_END()    if (irqon) __enable_irq()
+#define HAL_ADC_RESOLUTION 12
+```
+
+Each platform exposes the same interface — step/direction I/O, ADC reads, PWM, serial ports, EEPROM access, and timers — but implements them using its own SDK.
+
+## What each HAL provides
+
+Each HAL directory contains the following files (exact names vary slightly per platform):
+
+| File | Purpose |
+|---|---|
+| `HAL.h` / `HAL.cpp` | Core `MarlinHAL` class: init, reset, idle, watchdog, ADC |
+| `fastio.h` / `fastio.cpp` | Fast digital I/O macros (`READ`, `WRITE`, `SET_INPUT`, etc.) |
+| `timers.h` / `timers.cpp` | Stepper and temperature timer setup and ISRs |
+| `MarlinSerial.h` / `.cpp` | UART serial implementation |
+| `HAL_SPI.cpp` | SPI bus implementation |
+| `Servo.h` / `.cpp` | Software servo control |
+| `eeprom_*.cpp` | EEPROM read/write (flash emulation, I2C, or SPI variants) |
+| `pinsDebug.h` | Support for the M43 pin-reporting G-code |
+
+The STM32 HAL (`src/HAL/STM32/`) is the most fully-featured, with additional sub-directories for display drivers (`dogm/`, `tft/`, `u8g/`), SD card access (`sd/`, `sdio.*`), and USB serial (`usb_serial.*`).
+
+## The `shared/` directory
+
+Code that is portable across multiple platforms lives in `Marlin/src/HAL/shared/`. You do not need to duplicate this when adding a new platform.
+
+```
+Marlin/src/HAL/shared/
+├── backtrace/       # Stack-trace utilities
+├── cpu_exception/   # CPU fault handlers
+├── Delay.h/.cpp     # Platform-independent busy-wait delay
+├── eeprom_api.h     # Common EEPROM abstraction
+├── eeprom_if_i2c.cpp
+├── eeprom_if_spi.cpp
+├── esp_wifi.h/.cpp  # Wi-Fi helper (ESP32)
+├── fauxpins.h       # Stub pin definitions for unused features
+├── HAL.cpp          # Shared HAL implementation helpers
+├── HAL_SPI.h        # Common SPI API declarations
+├── math_32bit.h     # 32-bit math helpers used on ARM platforms
+├── MinSerial.h/.cpp # Minimal serial for early boot/panic output
+├── Marduino.h       # Arduino-like macros for non-Arduino toolchains
+├── progmem.h        # PROGMEM abstraction (no-op on 32-bit)
+├── serial_ports.h   # Multi-serial port definitions
+├── servo.h/.cpp     # Shared servo implementation
+└── servo_private.h
+```
+
+## Platform details
+
+<Tabs>
+  <Tab title="AVR">
+    **Directory:** `src/HAL/AVR/`
+
+    Targets ATmega1280, ATmega2560, ATmega644P, ATmega1284P, and AT90USB1286 microcontrollers. Uses direct register access for fast I/O, and the `FastIO` subsystem in `src/HAL/AVR/fastio/` maps Arduino pin numbers to port/bitmask pairs at compile time.
+
+    ADC resolution is 10-bit (`HAL_ADC_RESOLUTION 10`). Timer ISRs are configured in `timers.h` using AVR timer registers directly.
+
+    EEPROM access uses the AVR's built-in EEPROM peripheral via the `avr/eeprom.h` library.
+  </Tab>
+  <Tab title="STM32">
+    **Directory:** `src/HAL/STM32/` (Arduino STM32 framework) or `src/HAL/STM32F1/` (libmaple)
+
+    The `STM32` HAL covers STM32F4, STM32F7, STM32G0, STM32H7, and related parts built with the Arduino STM32 (STM32duino) framework. The `STM32F1` HAL covers STM32F103 parts built with the older libmaple-based framework.
+
+    ADC resolution is 12-bit. Critical sections use `__disable_irq()` / `__enable_irq()` CMSIS intrinsics. EEPROM is emulated in flash or mapped to an external I2C/SPI device depending on the board.
+
+    The `STM32` HAL also includes SDIO-based SD card access (`sdio.h`) and USB CDC serial (`usb_serial.h`).
+  </Tab>
+  <Tab title="LPC1768 / LPC1769">
+    **Directory:** `src/HAL/LPC1768/`
+
+    Targets NXP LPC1768 and LPC1769 (ARM Cortex-M3). Uses the `TARGET_LPC1768` define for detection. This HAL is commonly paired with Re-ARM, MKS SBASE, and BigTreeTech SKR V1.x boards.
+
+    EEPROM is typically emulated in flash. The HAL includes support for the hardware SPI and I2C peripherals as well as a software-PWM implementation for fans and servos.
+  </Tab>
+  <Tab title="ESP32">
+    **Directory:** `src/HAL/ESP32/`
+
+    Targets Espressif ESP32 via the Arduino ESP32 framework. Motor stepping on boards that lack dedicated step/direction pins (e.g., MRR ESPE, MKS TinyBee) uses an I2S stepper stream.
+
+    Wi-Fi support is provided by `src/HAL/shared/esp_wifi.h`. ADC resolution is 12-bit.
+  </Tab>
+  <Tab title="RP2040">
+    **Directory:** `src/HAL/RP2040/`
+
+    Targets the Raspberry Pi RP2040 (dual ARM Cortex-M0+). Detected via `__PLAT_RP2040__`. This HAL is considered beta-quality and covers boards such as the Raspberry Pi Pico and BigTreeTech SKR Pico.
+  </Tab>
+</Tabs>
+
+## Adding support for a new platform
+
+To add a new platform to Marlin you need to:
+
+1. **Create a HAL directory** under `Marlin/src/HAL/<PLATFORM_NAME>/` with at minimum: `HAL.h`, `HAL.cpp`, `fastio.h`, `timers.h`, `MarlinSerial.h`, and `pinsDebug.h`.
+
+2. **Add a detection branch** to `platforms.h` that maps the toolchain-defined macro (e.g., a new `ARDUINO_ARCH_*` or a custom `__PLAT_*` define) to your new `HAL_PATH`.
+
+3. **Add board definitions** to `Marlin/src/core/boards.h` with unique numeric IDs for each supported board, grouped by architecture.
+
+4. **Create pin files** in the appropriate subdirectory under `Marlin/src/pins/`, following the existing naming convention (`pins_BOARD_NAME.h`).
+
+5. **Add a PlatformIO environment** in the appropriate `ini/` file (e.g., `ini/stm32f4.ini`) so that `platformio run` can target the new platform.
+
+<CardGroup cols={2}>
+  <Card title="Supported boards" icon="list" href="/hardware/supported-boards">
+    Full list of board constants, IDs, and platform groupings.
+  </Card>
+  <Card title="Pin configuration" icon="cpu" href="/hardware/pins">
+    How pin definitions are structured per-board.
+  </Card>
+</CardGroup>

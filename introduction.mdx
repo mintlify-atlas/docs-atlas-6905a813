@@ -1,0 +1,53 @@
+---
+title: "Marlin Firmware"
+description: "Open-source 3D printer firmware for RepRap and commercial printers. Supports 8-bit AVR and 32-bit ARM microcontrollers."
+---
+
+Marlin is the world's most popular open-source firmware for desktop 3D printers. Running on everything from classic 8-bit Arduino boards to modern 32-bit ARM processors, Marlin powers millions of printers worldwide — from hobbyist builds to commercially manufactured machines.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/getting-started/installation">
+    Set up your build environment and get the source code
+  </Card>
+  <Card title="Building Marlin" icon="hammer" href="/getting-started/building">
+    Compile Marlin with PlatformIO or Arduino IDE
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/overview">
+    Configure Marlin for your specific printer hardware
+  </Card>
+  <Card title="G-code Reference" icon="terminal" href="/gcode/motion/G0-G1">
+    Complete reference for all supported G-code commands
+  </Card>
+</CardGroup>
+
+## What is Marlin?
+
+Marlin is a firmware for RepRap 3D printers, derived from the original Sprinter firmware and extended by a large open-source community. It controls every aspect of a printer's operation: motion planning, temperature regulation, bed leveling, LCD menus, and communication with host software.
+
+Key capabilities include:
+
+- **Multi-platform**: Runs on AVR, STM32, ESP32, RP2040, LPC1768, SAMD, Teensy, and more
+- **Automatic bed leveling**: Bilinear, Unified Bed Leveling (UBL), and Mesh Bed Leveling (MBL)
+- **Multi-extruder**: Up to 8 extruders and 9 coordinated axes
+- **TMC stepper drivers**: Full support for StealthChop, CoolStep, and Sensorless Homing
+- **Power-loss recovery**: Resume prints after unexpected power outages
+- **Filament runout detection**: Pause and resume on filament depletion
+- **Advanced motion**: S-Curve acceleration, Linear Advance, and Input Shaping
+
+## Quick navigation
+
+<CardGroup cols={3}>
+  <Card title="Supported boards" icon="circuit-board" href="/hardware/supported-boards">
+    View all supported MCU platforms and boards
+  </Card>
+  <Card title="Features" icon="star" href="/features/bed-leveling">
+    Explore Marlin's advanced features
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/contributing/overview">
+    Help improve Marlin firmware
+  </Card>
+</CardGroup>
+
+<Note>
+  Marlin 2.1 is the current stable branch. It supports both 8-bit AVR and 32-bit ARM boards while adding support for up to 9 coordinated axes and up to 8 extruders.
+</Note>

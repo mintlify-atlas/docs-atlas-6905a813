@@ -1,0 +1,144 @@
+---
+title: "Configuration overview"
+description: "An introduction to Marlin's two main configuration files and how to navigate and customize them."
+---
+
+Marlin's configuration is split across two C++ header files that you edit before compiling and flashing your firmware. Understanding their structure makes it much easier to find and change any setting.
+
+## The two configuration files
+
+### Configuration.h
+
+`Configuration.h` contains the fundamental settings that define your printer's hardware. The file header describes its scope:
+
+```cpp
+/**
+ * Configuration.h
+ *
+ * Basic settings such as:
+ *
+ * - Type of electronics
+ * - Type of temperature sensor
+ * - Printer geometry
+ * - Endstop configuration
+ * - LCD controller
+ * - Extra features
+ *
+ * Advanced settings can be found in Configuration_adv.h
+ */
+#define CONFIGURATION_H_VERSION 02010300
+```
+
+You must edit this file for every printer build. It covers the board selection, serial communication, temperature sensors, motion parameters, probe setup, and bed leveling method.
+
+### Configuration_adv.h
+
+`Configuration_adv.h` holds advanced settings that most users won't need to change, including:
+
+- Thermal protection thresholds and tuning
+- BLTouch-specific options
+- Linear Advance (`LIN_ADVANCE`)
+- Input shaping and Fixed-Time Motion (`FT_MOTION`)
+- Firmware retraction
+- TMC stepper driver configuration
+- Custom menus and host actions
+
+Changes to `Configuration_adv.h` usually depend on options already enabled in `Configuration.h`.
+
+## @section markers
+
+Both files use `// @section <name>` comments to group related settings. These markers let tools, scripts, and the Marlin Configurator web app jump directly to a section. They also make `grep` and editor search much more useful.
+
+For example, the motion section in `Configuration.h` starts with:
+
+```cpp
+// @section motion
+```
+
+Key sections in `Configuration.h`:
+
+| Section | What it covers |
+|---|---|
+| `info` | Author string |
+| `machine` | Board selection (`MOTHERBOARD`) |
+| `serial` | `SERIAL_PORT`, `BAUDRATE` |
+| `extruder` | `EXTRUDERS`, filament diameter |
+| `temperature sensors` | `TEMP_SENSOR_0`, `TEMP_SENSOR_BED`, etc. |
+| `hotend temp` | PID settings, `PIDTEMP` |
+| `bed temp` | `PIDTEMPBED`, bed PID values |
+| `safety` | `PREVENT_COLD_EXTRUSION`, thermal protection |
+| `kinematics` | CoreXY, Delta, SCARA geometry |
+| `motion` | Steps/mm, feed rates, acceleration, jerk |
+| `probes` | Probe type, offsets, BLTouch |
+| `geometry` | `X_BED_SIZE`, `Y_BED_SIZE`, `Z_MAX_POS` |
+| `calibrate` | Bed leveling method, grid points |
+
+Key sections in `Configuration_adv.h`:
+
+| Section | What it covers |
+|---|---|
+| `temperature` | Thermocouple error handling, custom thermistors |
+| `bltouch` | BLTouch mode, high-speed probing |
+| `motion control` | Fixed-Time Motion, Input Shaping |
+| `baby-stepping` | Babystep increments and menus |
+| `extruder` | Linear Advance (`LIN_ADVANCE`) |
+| `leveling` | Safe leveling coordinates, mesh bounds |
+| `tmc_smart` | TMC driver configuration |
+| `firmware retraction` | `FWRETRACT` settings |
+
+## Enabling and disabling options
+
+Most optional features are controlled with `#define` / comment-out pairs:
+
+```cpp
+// Enable a feature by uncommenting the #define:
+#define BLTOUCH
+
+// Disable a feature by commenting it out:
+//#define BLTOUCH
+```
+
+When a feature has sub-options, they are wrapped in an `#if ENABLED(...)` block. You only need to configure the sub-options when the parent feature is enabled.
+
+```cpp
+//#define CLASSIC_JERK
+#if ENABLED(CLASSIC_JERK)
+  #define DEFAULT_XJERK 10.0
+  #define DEFAULT_YJERK 10.0
+  #define DEFAULT_ZJERK  0.3
+  #define DEFAULT_EJERK  5.0
+#endif
+```
+
+## The config.ini approach
+
+Marlin also supports a `config.ini` file for use with the PlatformIO build system. This lets you override specific `#define` values without editing the header files directly — useful for CI pipelines or managing multiple machine profiles from a single source tree.
+
+<Note>
+The `config.ini` approach requires PlatformIO and is documented in the Marlin repository's `ini/` directory. Most users edit `Configuration.h` directly.
+</Note>
+
+## Example configurations
+
+The Marlin project maintains a separate repository of tested, board-specific example configurations:
+
+**[github.com/MarlinFirmware/Configurations](https://github.com/MarlinFirmware/Configurations/branches/all)**
+
+Each branch corresponds to a Marlin release. Inside, you'll find pre-configured `Configuration.h` and `Configuration_adv.h` files organized by printer model. Copy the closest matching example to your `Marlin/` directory and adjust from there — this is much faster than starting from the default file.
+
+## Explore the configuration sections
+
+<CardGroup cols={2}>
+  <Card title="Basic settings" href="/configuration/basic-settings" icon="sliders">
+    Board selection, serial ports, extruder count, and printer dimensions.
+  </Card>
+  <Card title="Motion settings" href="/configuration/motion" icon="arrows-up-down-left-right">
+    Steps per mm, feed rates, acceleration, jerk, and Linear Advance.
+  </Card>
+  <Card title="Temperature settings" href="/configuration/temperature" icon="thermometer">
+    Sensor types, PID tuning, thermal protection, and cold extrusion prevention.
+  </Card>
+  <Card title="Bed leveling" href="/configuration/bed-leveling" icon="table-cells">
+    Bilinear ABL, Unified Bed Leveling, and manual Mesh Bed Leveling.
+  </Card>
+</CardGroup>

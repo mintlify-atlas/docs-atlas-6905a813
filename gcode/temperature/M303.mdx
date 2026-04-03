@@ -1,0 +1,113 @@
+---
+title: "M303 — PID autotune"
+description: "Automatically tune PID heating parameters for a hotend, heated bed, or heated chamber."
+---
+
+M303 runs the PID autotune procedure: it cycles the target heater on and off several times, measures the thermal response, and calculates optimal P, I, and D values. Requires `HAS_PID_HEATING` to be enabled in firmware.
+
+<Warning>
+  Stay near the printer during autotune. The heater will be driven hard and will overshoot its target temperature repeatedly. Never leave the printer unattended while autotune is running.
+</Warning>
+
+## Syntax
+
+```gcode
+M303 [E<index>] [S<temp>] [C<cycles>] [U<bool>]
+```
+
+## Parameters
+
+<ParamField path="E" type="int" default="0">
+  Heater to tune. Use the extruder index (0, 1, …) for a hotend, or `-1` for the heated bed. With `PIDTEMPCHAMBER` enabled, use the appropriate chamber heater ID. Defaults to `E0` (the first hotend).
+</ParamField>
+
+<ParamField path="S" type="float">
+  Target temperature in degrees Celsius to tune at. You should use a temperature representative of your actual printing temperature — results are most accurate when tuned at the temperature you print at. Defaults to 150°C for hotends and 70°C for the bed.
+</ParamField>
+
+<ParamField path="C" type="int" default="5">
+  Number of cycles to run. More cycles produce more reliable results. Must be at least 3. Defaults to 5.
+</ParamField>
+
+<ParamField path="U" type="bool" default="0">
+  Whether to automatically apply the tuned PID values when autotune finishes. Set `U1` to apply immediately. If `U0` (the default), the results are reported to the serial console but not applied — you must run M301 (hotend) or M304 (bed) manually to apply them.
+</ParamField>
+
+## How autotune works
+
+The autotune algorithm uses relay-feedback control (bang-bang cycling):
+
+1. The heater is driven to full power until the target temperature is exceeded.
+2. The heater is turned off and the temperature is allowed to drop below the target.
+3. This cycle repeats `C` times, measuring the oscillation period and amplitude each time.
+4. From these measurements, the algorithm derives the P, I, and D constants that minimise overshoot and settling time.
+
+The process takes several minutes per cycle depending on the heater's thermal mass. During the run, Marlin sends periodic status lines to the serial console showing the current temperature and progress.
+
+## Applying the results
+
+After autotune completes, the computed values are printed to the serial console in a form you can copy directly into your configuration or use in subsequent commands:
+
+```
+ Kp: 22.20  Ki: 1.08  Kd: 114.00
+```
+
+To apply the results permanently:
+
+- **Hotend:** send `M301 P<Kp> I<Ki> D<Kd>` then `M500` to save.
+- **Bed:** send `M304 P<Kp> I<Ki> D<Kd>` then `M500` to save.
+
+If you used `U1`, the values are applied to RAM immediately but are not persisted across reboots until you run `M500`.
+
+## Running PID autotune
+
+<Steps>
+  <Step title="Heat the printer to standby">
+    Allow the printer to stabilise at room temperature, or at a known standby state. Remove any filament that could ooze during the procedure.
+  </Step>
+  <Step title="Send the autotune command">
+    Choose a target temperature that matches your typical printing temperature. For a hotend, 200–220°C is typical for PLA; for a bed, 60°C is common.
+
+    ```gcode
+    M303 E0 S200 C8 U1
+    ```
+
+    This tunes hotend 0 at 200°C, runs 8 cycles, and applies the result automatically.
+  </Step>
+  <Step title="Wait for the procedure to complete">
+    Watch the serial console for progress output. The heater will cycle up and down repeatedly. Autotune is complete when you see the `Kp`, `Ki`, `Kd` output line and `PID Autotune finished`.
+  </Step>
+  <Step title="Save the results">
+    If you did not use `U1`, copy the reported values and apply them manually:
+
+    Apply hotend PID (M301) or bed PID (M304) and save with M500:
+
+    ```gcode
+    M301 P22.20 I1.08 D114.00   ; Apply hotend PID values
+    M500                         ; Save to EEPROM
+    ```
+
+    For the bed:
+
+    ```gcode
+    M304 P48.60 I1.50 D394.00   ; Apply bed PID values
+    M500                         ; Save to EEPROM
+    ```
+  </Step>
+</Steps>
+
+## Examples
+
+```gcode
+M303 E0 S200 C8 U1      ; Autotune hotend 0 at 200°C, 8 cycles, apply result
+M303 E-1 S60 C5         ; Autotune bed at 60°C, 5 cycles, report only
+M303 E1 S230 C5 U1      ; Autotune hotend 1 at 230°C (e.g. for ABS)
+```
+
+## Related commands
+
+- M301 — Set hotend PID values (P, I, D)
+- M304 — Set bed PID values (P, I, D)
+- [M500–M504](/gcode/eeprom/M500-M504) — Save settings to EEPROM
+- [M104/M109](/gcode/temperature/M104-M109) — Set hotend temperature
+- [M140/M190](/gcode/temperature/M140-M190) — Set bed temperature

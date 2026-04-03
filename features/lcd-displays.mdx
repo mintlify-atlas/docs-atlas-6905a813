@@ -1,0 +1,289 @@
+---
+title: "LCD displays & controllers"
+description: "Supported display types in Marlin and how to select and configure them in Configuration.h."
+---
+
+Marlin supports a wide range of display hardware — from simple character LCDs to full-color touchscreen TFTs. The display is configured by enabling exactly one controller define in `Configuration.h`. The LCD section is divided into several groups: character-based LCDs, I2C and shift-register LCDs, graphical DOGM LCDs, OLED displays, extensible-UI (touch) displays, graphical TFTs, and DWIN-based displays used on Creality machines.
+
+<Note>
+Enable only one display type at a time. Enabling multiple controller defines simultaneously will cause compilation errors or unpredictable behavior.
+</Note>
+
+## Character-based LCDs (HD44780)
+
+Character LCDs use the HD44780 (or compatible) controller and display text in a fixed grid of characters. They are inexpensive and do not require a graphics library.
+
+The character set is selected with:
+
+```cpp
+// Configuration.h
+#define DISPLAY_CHARSET_HD44780 JAPANESE  // JAPANESE, WESTERN, or CYRILLIC
+```
+
+Common character LCD options:
+
+```cpp
+// Configuration.h — Character-based LCDs section
+
+// RepRapDiscount Smart Controller (20×4, white PCB, SD card, rotary encoder)
+//#define REPRAP_DISCOUNT_SMART_CONTROLLER
+
+// Ultimaker Controller
+//#define ULTIMAKERCONTROLLER
+
+// ULTIPANEL (generic 20×4 with encoder, as seen on Thingiverse)
+//#define ULTIPANEL
+
+// ANET and Tronxy 20×4 LCD2004 with 5 analog buttons
+//#define ZONESTAR_LCD
+
+// Generic 16×2, 16×4, 20×2, or 20×4 character LCD
+//#define ULTRA_LCD
+```
+
+### I2C and shift-register variants
+
+Some character displays connect over I2C or use a shift register for the data bus:
+
+```cpp
+// Sainsmart / YwRobot I2C 16×2 or 20×4
+//#define LCD_SAINSMART_I2C_1602
+//#define LCD_SAINSMART_I2C_2004
+
+// Generic LCM1602 LCD adapter
+//#define LCM1602
+
+// PANELOLU2 with I2C and separate encoder/click input
+//#define LCD_I2C_PANELOLU2
+
+// Panucatt VIKI LCD with status LEDs and integrated buttons
+//#define LCD_I2C_VIKI
+
+// TFT GLCD Panel connected via SPI or I2C
+//#define TFTGLCD_PANEL_SPI
+//#define TFTGLCD_PANEL_I2C
+```
+
+## Graphical LCDs (DOGM — 128×64)
+
+Graphical LCDs render a full 128×64 pixel bitmap. Marlin uses the U8glib library for these displays. If your graphical LCD is unresponsive, try reversing the EXP1/EXP2 connector plugs.
+
+```cpp
+// Configuration.h — Graphical LCDs section
+
+// RepRapDiscount FULL GRAPHIC Smart Controller (128×64, most common graphical controller)
+//#define REPRAP_DISCOUNT_FULL_GRAPHIC_SMART_CONTROLLER
+
+// Creality CR-10 / CR-7 / Ender-3 stock display (128×64, connects to EXP1)
+//#define CR10_STOCKDISPLAY
+
+// Ender-2 stock display (variant of MKS MINI 12864)
+//#define ENDER2_STOCKDISPLAY
+
+// MKS MINI 12864 with graphic controller and SD support
+//#define MKS_MINI_12864
+
+// BigTreeTech Mini 12864 V1.0 / V2.0 (NeoPixel RGB backlight)
+//#define BTT_MINI_12864
+
+// FYSETC Mini 12864 variants
+//#define FYSETC_MINI_12864_X_X    // Type C/D/E/F — no tunable RGB backlight
+//#define FYSETC_MINI_12864_1_2    // Type C/D/E/F — simple RGB backlight
+//#define FYSETC_MINI_12864_2_0    // Type A/B — discreet RGB backlight
+//#define FYSETC_MINI_12864_2_1    // Type A/B — NeoPixel RGB backlight
+
+// Viki 2.0 or mini Viki with graphic LCD
+//#define VIKI2
+//#define miniVIKI
+
+// ANET Full Graphics LCD (used on Anet A6)
+//#define ANET_FULL_GRAPHICS_LCD
+```
+
+## OLED displays
+
+OLED displays use SSD1306 or SH1106 controllers and produce very sharp output at small sizes:
+
+```cpp
+// Configuration.h — OLED Displays section
+
+// Generic SSD1306 OLED (full graphics, 128×64)
+//#define U8GLIB_SSD1306
+
+// SAV 3D OLED with SSD1306 or SH1106
+//#define SAV_3DGLCD
+#if ENABLED(SAV_3DGLCD)
+  #define U8GLIB_SSD1306
+  //#define U8GLIB_SH1106
+#endif
+
+// MKS OLED 1.3" 128×64
+//#define MKS_12864OLED          // SH1106 controller
+//#define MKS_12864OLED_SSD1306  // SSD1306 controller
+
+// Zonestar OLED options
+//#define ZONESTAR_12864LCD           // Graphical (DOGM) with ST7920
+//#define ZONESTAR_12864OLED          // 1.3" OLED with SH1106
+//#define ZONESTAR_12864OLED_SSD1306  // 0.96" OLED with SSD1306
+
+// FYSETC 2.42" OLED 128×64 with WS2812 RGB
+//#define FYSETC_242_OLED_12864
+```
+
+## DGUS touch displays
+
+DGUS displays from DWIN run their own OS and communicate with Marlin over serial. Different UI styles require different resources to be copied to the display's SD card.
+
+```cpp
+// Configuration.h
+// :[ 'ORIGIN', 'FYSETC', 'HYPRECY', 'MKS', 'RELOADED', 'IA_CREALITY', 'E3S1PRO' ]
+//#define DGUS_LCD_UI ORIGIN
+```
+
+Each variant requires a corresponding resource package flashed to the display itself. See the comment block in `Configuration.h` for download links for each style.
+
+## FTDI EVE touch displays
+
+The FTDI EVE (FT800/FT810) touch UI is enabled with:
+
+```cpp
+// Configuration.h
+//#define TOUCH_UI_FTDI_EVE
+```
+
+Further configuration (display resolution, SPI pins, orientation) is done in `Configuration_adv.h`.
+
+## Graphical TFTs
+
+Graphical TFT displays use FSMC or SPI interfaces and are common on Creality, MKS, and BigTreeTech boards. Three UI styles are available for these displays:
+
+```cpp
+// Configuration.h — TFT UI selection (choose one)
+//#define TFT_CLASSIC_UI  // Emulated DOGM 128×64 upscaled — familiar Marlin look
+//#define TFT_COLOR_UI    // Full-color Marlin menus with touch support
+//#define TFT_LVGL_UI     // Modern UI using the LVGL graphics library
+```
+
+<Tabs>
+  <Tab title="Vendor presets">
+    Enable one preset for your specific board/display combination:
+
+    ```cpp
+    // MKS TS35 — 480×320, 3.5", SPI (MKS Robin Nano V2/V3)
+    //#define MKS_TS35_V2_0
+
+    // MKS Robin TFT displays (FSMC interface)
+    //#define MKS_ROBIN_TFT24   // 320×240, 2.4"
+    //#define MKS_ROBIN_TFT28   // 320×240, 2.8"
+    //#define MKS_ROBIN_TFT32   // 320×240, 3.2"
+    //#define MKS_ROBIN_TFT35   // 480×320, 3.5"
+    //#define MKS_ROBIN_TFT43   // 480×272, 4.3"
+
+    // AnyCubic / Tronxy / Anet TFT displays
+    //#define ANYCUBIC_TFT35
+    //#define TFT_TRONXY_X5SA
+    //#define ANET_ET4_TFT28
+    //#define ANET_ET5_TFT35
+
+    // BigTreeTech displays
+    //#define BIQU_BX_TFT70    // 1024×600, 7"
+    //#define BTT_TFT35_SPI_V1_0  // 480×320, 3.5", SPI
+    ```
+  </Tab>
+
+  <Tab title="Generic TFT">
+    Use `TFT_GENERIC` for displays not covered by a preset. Specify the driver, interface, and resolution:
+
+    ```cpp
+    //#define TFT_GENERIC
+    #if ENABLED(TFT_GENERIC)
+      // Driver: AUTO, ST7735, ST7789, ST7796, R61505, ILI9328, ILI9341, ILI9488
+      #define TFT_DRIVER AUTO
+
+      //#define TFT_INTERFACE_FSMC
+      //#define TFT_INTERFACE_SPI
+
+      //#define TFT_RES_320x240
+      //#define TFT_RES_480x272
+      //#define TFT_RES_480x320
+      //#define TFT_RES_1024x600
+    #endif
+    ```
+  </Tab>
+
+  <Tab title="TFT Color UI options">
+    When `TFT_COLOR_UI` is active, configure the font and theme:
+
+    ```cpp
+    #if ENABLED(TFT_COLOR_UI)
+      // Font: NOTOSANS (anti-aliased, Latin Extended + non-Latin)
+      //       UNIFONT   (lightweight, no anti-aliasing, Latin Extended + non-Latin)
+      //       HELVETICA (lightweight, Basic Latin + Latin-1 only)
+      #define TFT_FONT  NOTOSANS
+
+      // Theme: BLUE_MARLIN, BLACK_MARLIN, ANET_BLACK
+      #define TFT_THEME BLACK_MARLIN
+
+      #define COMPACT_MARLIN_BOOT_LOGO
+    #endif
+    ```
+  </Tab>
+</Tabs>
+
+Enable touch input for TFT displays with:
+
+```cpp
+//#define TOUCH_SCREEN
+#if ENABLED(TOUCH_SCREEN)
+  #define BUTTON_DELAY_EDIT      50 // (ms) repeat delay for edit screens
+  #define BUTTON_DELAY_MENU     250 // (ms) repeat delay for menus
+  #define TOUCH_SCREEN_CALIBRATION
+#endif
+```
+
+## DWIN displays (Creality Ender-3 V2 and variants)
+
+The DWIN display used on the Ender-3 V2 and similar Creality machines connects over UART and has its own internal processor. Several UI options are available:
+
+```cpp
+// Configuration.h
+//#define DWIN_CREALITY_LCD           // Stock Creality UI
+//#define DWIN_LCD_PROUI              // Pro UI by MRiscoC
+//#define DWIN_CREALITY_LCD_JYERSUI   // Jyers UI by Jacob Myers
+//#define DWIN_MARLINUI_PORTRAIT      // MarlinUI (portrait orientation)
+//#define DWIN_MARLINUI_LANDSCAPE     // MarlinUI (landscape orientation)
+```
+
+## Display orientation
+
+For TFT displays, set the rotation with:
+
+```cpp
+// Configuration.h
+// Options: TFT_NO_ROTATION, TFT_ROTATE_90, TFT_ROTATE_180, TFT_ROTATE_270
+// Mirror variants: TFT_ROTATE_90_MIRROR_X, TFT_MIRROR_X, TFT_MIRROR_Y, etc.
+//#define TFT_ROTATION TFT_NO_ROTATION
+```
+
+## LCD menu options
+
+These options apply across most display types:
+
+```cpp
+// Configuration.h
+
+// Info screen layout: 0=Classic, 1=Průša, 2=CNC
+#define LCD_INFO_SCREEN_STYLE 0
+
+// Remove all menus and show only the status screen
+//#define NO_LCD_MENUS
+
+// Remove non-essential menu items to save flash space
+//#define SLIM_LCD_MENUS
+
+// Add individual axis homing items to the LCD menu
+//#define INDIVIDUAL_AXIS_HOMING_MENU
+
+// Add a sub-menu for bed leveling (ABL or MBL)
+//#define LCD_BED_LEVELING
+```

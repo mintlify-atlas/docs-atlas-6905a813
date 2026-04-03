@@ -1,0 +1,303 @@
+---
+title: "M200–M205 — Motion settings"
+description: "Configure filament diameter, print moves, travel moves, and jerk/junction deviation"
+---
+
+The M200–M205 command group controls how Marlin plans and executes motion. These settings affect extrusion volume, per-axis speed and acceleration limits, and the smoothness of direction changes. All values are retained in RAM and can be saved to EEPROM with [M500](/gcode/eeprom/M500-M504).
+
+<AccordionGroup>
+  <Accordion title="M200 — Filament diameter">
+
+M200 sets the filament diameter for volumetric extrusion and optionally enables or disables volumetric mode. When volumetric extrusion is active, E values in G-code are interpreted as cubic millimetres (mm³) of filament rather than linear millimetres. Marlin internally converts the volume to a linear distance using the configured filament cross-section.
+
+<Note>
+  M200 requires `HAS_VOLUMETRIC_EXTRUSION` (enabled when `VOLUMETRIC_EXTRUSION` or `VOLUMETRIC_EXTRUDER_LIMIT` is defined in `Configuration.h`). Without it, M200 has no effect.
+</Note>
+
+### Syntax
+
+```gcode
+M200 [T<index>] [D<diameter>] [S<bool>] [L<limit>]
+```
+
+Send `M200` with no arguments to report the current filament diameter and volumetric state.
+
+### Parameters
+
+<ParamField path="T" type="int">
+  Extruder index. Defaults to the currently active extruder.
+</ParamField>
+
+<ParamField path="D" type="float">
+  Filament diameter in mm. Setting `D1.75` enables volumetric extrusion with 1.75 mm filament. Setting `D0` disables volumetric extrusion.
+</ParamField>
+
+<ParamField path="S" type="boolean">
+  Enable (`S1`) or disable (`S0`) volumetric extrusion globally without changing the stored diameter.
+</ParamField>
+
+<ParamField path="L" type="float">
+  Volumetric extruder limit in mm³/s. Set `L0` to disable the limit. Only available when `VOLUMETRIC_EXTRUDER_LIMIT` is enabled. Valid range is 0 to `VOLUMETRIC_EXTRUDER_LIMIT_MAX`.
+</ParamField>
+
+### Examples
+
+Enable volumetric extrusion with 1.75 mm filament:
+
+```gcode
+M200 D1.75
+```
+
+Enable volumetric extrusion with 2.85 mm filament and set a 15 mm³/s flow limit:
+
+```gcode
+M200 D2.85 L15
+```
+
+Disable volumetric extrusion:
+
+```gcode
+M200 D0
+```
+
+  </Accordion>
+
+  <Accordion title="M201 — Max acceleration">
+
+M201 sets the maximum acceleration allowed for each axis during print moves. These are hard per-axis limits that Marlin enforces during motion planning regardless of what the slicer requests. Lowering these values produces smoother, quieter motion; raising them allows faster direction changes.
+
+### Syntax
+
+```gcode
+M201 [T<index>] [X<accel>] [Y<accel>] [Z<accel>] [E<accel>]
+```
+
+Send `M201` with no arguments to report the current values.
+
+### Parameters
+
+<ParamField path="T" type="int">
+  Extruder index for the `E` parameter. Only relevant when `DISTINCT_E_FACTORS` is enabled.
+</ParamField>
+
+<ParamField path="X" type="float">
+  Maximum acceleration for the X axis in mm/s².
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Maximum acceleration for the Y axis in mm/s².
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Maximum acceleration for the Z axis in mm/s².
+</ParamField>
+
+<ParamField path="E" type="float">
+  Maximum acceleration for the extruder in mm/s².
+</ParamField>
+
+When `XY_FREQUENCY_LIMIT` is enabled, M201 also accepts:
+
+<ParamField path="F" type="int">
+  Frequency limit for XY direction changes in Hz.
+</ParamField>
+
+<ParamField path="S" type="float">
+  Minimum speed factor as a percentage (1–100) applied when the XY frequency limit is active.
+</ParamField>
+
+### Examples
+
+Set conservative print accelerations:
+
+```gcode
+M201 X500 Y500 Z100 E5000
+```
+
+Set higher XY acceleration for a fast printer:
+
+```gcode
+M201 X3000 Y3000 Z100 E5000
+```
+
+  </Accordion>
+
+  <Accordion title="M203 — Max feedrate">
+
+M203 sets the maximum feedrate (top speed) for each axis. Marlin clamps all motion to these limits during planning. Unlike the slicer feedrate (`F` parameter on G0/G1), these are firmware-enforced maximums that cannot be exceeded regardless of what a print file requests.
+
+### Syntax
+
+```gcode
+M203 [T<index>] [X<rate>] [Y<rate>] [Z<rate>] [E<rate>]
+```
+
+Send `M203` with no arguments to report the current values.
+
+### Parameters
+
+<ParamField path="T" type="int">
+  Extruder index for the `E` parameter. Only relevant when `DISTINCT_E_FACTORS` is enabled.
+</ParamField>
+
+<ParamField path="X" type="float">
+  Maximum feedrate for the X axis in mm/s.
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Maximum feedrate for the Y axis in mm/s.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Maximum feedrate for the Z axis in mm/s.
+</ParamField>
+
+<ParamField path="E" type="float">
+  Maximum feedrate for the extruder in mm/s.
+</ParamField>
+
+### Examples
+
+Set typical feedrate limits for a Cartesian printer:
+
+```gcode
+M203 X200 Y200 Z10 E50
+```
+
+Raise the extruder feedrate for high-speed printing:
+
+```gcode
+M203 E120
+```
+
+  </Accordion>
+
+  <Accordion title="M204 — Print, retract, and travel acceleration">
+
+M204 sets three separate acceleration presets that Marlin applies depending on the type of move being executed. Unlike M201 which limits per-axis acceleration, M204 sets the target acceleration used during motion planning for each move category.
+
+### Syntax
+
+```gcode
+M204 [P<accel>] [R<accel>] [T<accel>]
+```
+
+Send `M204` with no arguments to report the current values.
+
+### Parameters
+
+<ParamField path="P" type="float">
+  Acceleration for printing moves (moves that include extrusion) in mm/s².
+</ParamField>
+
+<ParamField path="R" type="float">
+  Acceleration for retraction moves (E-only moves with no XYZ motion) in mm/s².
+</ParamField>
+
+<ParamField path="T" type="float">
+  Acceleration for travel moves (moves with no extrusion) in mm/s².
+</ParamField>
+
+<Note>
+  The legacy `S` parameter sets both print acceleration and travel acceleration to the same value. It exists for compatibility with old G-code but should not be used in new profiles — use `P` and `T` separately instead.
+</Note>
+
+### Examples
+
+Set balanced print and travel accelerations:
+
+```gcode
+M204 P1200 R3000 T1500
+```
+
+Boost retraction acceleration for cleaner retracts:
+
+```gcode
+M204 R5000
+```
+
+  </Accordion>
+
+  <Accordion title="M205 — Advanced motion settings">
+
+M205 configures minimum feedrates, minimum segment time, and the jerk or junction deviation settings that control how aggressively Marlin changes direction between moves.
+
+### Syntax
+
+```gcode
+M205 [B<µs>] [S<rate>] [T<rate>] [J<deviation>] [X<jerk>] [Y<jerk>] [Z<jerk>] [E<jerk>]
+```
+
+Send `M205` with no arguments to report the current values.
+
+### Parameters
+
+<ParamField path="B" type="int">
+  Minimum segment time in microseconds. If a move segment would take less time than this, Marlin reduces the feedrate to ensure it takes at least this long. Prevents very short segments from causing the planner to stall.
+</ParamField>
+
+<ParamField path="S" type="float">
+  Minimum feedrate for print moves in mm/s. Moves below this speed are clamped up to this value.
+</ParamField>
+
+<ParamField path="T" type="float">
+  Minimum feedrate for travel moves in mm/s.
+</ParamField>
+
+<ParamField path="J" type="float">
+  Junction deviation in mm. Controls how much the toolhead can deviate from the ideal path at direction changes. Larger values allow higher cornering speeds at the cost of path fidelity. Valid range is 0.01–0.30 mm. Only available when `JUNCTION_DEVIATION_MM` is defined (i.e. `CLASSIC_JERK` is **not** enabled).
+</ParamField>
+
+<ParamField path="X" type="float">
+  Maximum jerk for the X axis in mm/s. Only available when `CLASSIC_JERK` is enabled.
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Maximum jerk for the Y axis in mm/s. Only available when `CLASSIC_JERK` is enabled.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Maximum jerk for the Z axis in mm/s. Only available when `CLASSIC_JERK` is enabled.
+</ParamField>
+
+<ParamField path="E" type="float">
+  Maximum jerk for the extruder in mm/s. Only available when `CLASSIC_JERK` and `HAS_CLASSIC_E_JERK` are enabled.
+</ParamField>
+
+<Note>
+  **`CLASSIC_JERK` vs `JUNCTION_DEVIATION_MM`** — these are mutually exclusive motion-planning strategies. When `CLASSIC_JERK` is enabled, M205 accepts per-axis `X`/`Y`/`Z`/`E` jerk values (instantaneous velocity change limits). When it is disabled, Marlin uses junction deviation instead and M205 accepts the `J` parameter. Check your `Configuration.h` to know which mode your build uses. The `M205` report header shows which parameters are active.
+</Note>
+
+### Examples
+
+Set minimum feedrates and segment time:
+
+```gcode
+M205 S0 T0 B20000
+```
+
+Configure junction deviation (junction deviation mode):
+
+```gcode
+M205 J0.08
+```
+
+Configure classic jerk limits:
+
+```gcode
+M205 X10 Y10 Z0.3 E5
+```
+
+<Warning>
+  Setting Z jerk very low (at or below 0.1 mm/s) when a mesh bed leveling system is active can cause the printer to pause unexpectedly at every mesh point during a print. Marlin emits a warning when this condition is detected.
+</Warning>
+
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+- [M92 — Steps per unit](/gcode/config/M92)
+- [M500–M504 — EEPROM](/gcode/eeprom/M500-M504) — Save and restore settings
+- `DEFAULT_MAX_FEEDRATE`, `DEFAULT_MAX_ACCELERATION`, `DEFAULT_ACCELERATION` in `Configuration.h`
+- `CLASSIC_JERK`, `JUNCTION_DEVIATION_MM` in `Configuration.h`

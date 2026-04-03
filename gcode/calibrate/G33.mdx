@@ -1,0 +1,202 @@
+---
+title: "G33 — Delta auto calibration"
+description: "Calibrate delta printer geometry automatically by probing multiple points across the bed"
+---
+
+G33 automatically calibrates a delta printer's geometry by probing a set of points across the print surface and iteratively adjusting the firmware's internal delta parameters until the deviation across all probe points falls below an acceptable threshold.
+
+The command adjusts up to five classes of delta parameters depending on the number of probe points selected:
+
+- **Height** (`delta_height`) — corrects the overall Z offset
+- **Endstop adjustments** (`Ex`, `Ey`, `Ez`) — corrects uneven tower heights
+- **Delta radius** — corrects the bowl or dome shape of the bed surface
+- **Tower angle trims** (`Tx`, `Ty`, `Tz`) — corrects twist and lean in each tower's position
+
+<Warning>
+  G33 is only available on delta printers and requires `DELTA_AUTO_CALIBRATION` to be enabled in `Configuration.h`. It will not compile or run on Cartesian, CoreXY, or other non-delta kinematics.
+</Warning>
+
+<Note>
+  You must home the printer with G28 before running G33. The command calls its own internal homing routine at the start of each iteration, but the initial state must be homed.
+</Note>
+
+## Syntax
+
+```gcode
+G33 [C<precision>] [E] [F<iterations>] [O] [P<points>] [R<mm>] [T] [V<level>]
+```
+
+## Parameters
+
+<ParamField path="P" type="integer">
+  Number of probe points (0–10, default set by `DELTA_CALIBRATION_DEFAULT_POINTS`).
+
+  | Value | Behavior |
+  |-------|----------|
+  | P0 | No probing — normalize endstop and tower angle corrections only |
+  | P1 | Probe center point only; set height |
+  | P2 | Probe center and three tower points; set height, endstops, and delta radius |
+  | P3 | Probe center, towers, and opposite points; set all parameters |
+  | P4–P10 | Add intermediate points between towers for increased accuracy (more probe points per iteration) |
+</ParamField>
+
+<ParamField path="C" type="float">
+  Calibration precision target in mm (must be ≥ 0). Iterations stop when the standard deviation of probe results falls at or below this value. Omit to let the algorithm iterate until convergence plateaus.
+</ParamField>
+
+<ParamField path="F" type="integer">
+  Force this number of iterations (1–30) regardless of whether precision is improving. The best result across all forced iterations is retained. Useful for ensuring a thorough calibration on the first run.
+</ParamField>
+
+<ParamField path="V" type="integer">
+  Verbosity level (0–3, default: 1).
+
+  | Value | Output |
+  |-------|--------|
+  | V0 | Dry-run mode — probe and report results without applying any corrections |
+  | V1 | Report initial and final settings only |
+  | V2 | Report settings at each iteration |
+  | V3 | Report settings and full probe results at each iteration |
+</ParamField>
+
+<ParamField path="E" type="boolean">
+  Engage (deploy and stow) the probe for every individual probe point. By default the probe is raised but not fully stowed between points. Use this flag if your probe requires a full deploy/stow cycle for reliable readings.
+</ParamField>
+
+<ParamField path="T" type="boolean">
+  Disable tower angle correction calibration. When present, G33 skips adjustment of `Tx`, `Ty`, and `Tz` even when `P3` or higher is specified. Useful if you have already tuned tower angles and only want to touch endstops and radius.
+</ParamField>
+
+<ParamField path="R" type="float">
+  Reduce the probe grid radius by this many mm. The default calibration radius is derived from `PRINTABLE_RADIUS` minus `PROBING_MARGIN`. Specifying a positive value here shrinks it further, keeping all probe points away from the bed perimeter.
+</ParamField>
+
+<ParamField path="O" type="boolean">
+  Probe at positions relative to the probe's XY offset rather than the exact kinematic calibration points. Only available when `HAS_PROBE_XY_OFFSET` is enabled. This lets you probe at the same positions the nozzle would use.
+</ParamField>
+
+## How delta calibration works
+
+A delta printer's position accuracy depends on six geometric parameters: three endstop corrections, the delta radius, the print height, and three tower angle trims. Small manufacturing variations in any of these cause the actual print surface to be bowl-shaped, dome-shaped, or tilted.
+
+G33 uses a least-squares matrix approach (derived from forward and inverse kinematics at each probe point) to determine how much each parameter must change to bring all probe readings as close to zero as possible. After each iteration the printer re-homes and probes again. Iterations continue until either:
+
+1. The standard deviation of probe heights falls to or below the `C` precision target, or
+2. Further iterations stop improving the result (convergence).
+
+At convergence, if the latest result was worse than a previous iteration, the algorithm rolls back to the previously best-known settings.
+
+When calibration completes, the new values are held in RAM. Use `M500` to save them to EEPROM, or copy the printed values to `Configuration.h` for a permanent build-time default.
+
+## Output interpretation
+
+At the end of each iteration G33 prints a line similar to:
+
+```text
+.Height:250.00  Ex:+0.12  Ey:-0.08  Ez:-0.04  Radius:99.80
+.                         Tx:+0.01  Ty:+0.03  Tz:-0.04
+Iteration : 01                                std dev:0.042
+```
+
+- **Height** — current delta height value
+- **Ex / Ey / Ez** — endstop corrections for towers A, B, C
+- **Radius** — current delta radius
+- **Tx / Ty / Tz** — tower angle trim values
+- **std dev** — standard deviation of all probe measurements from the zero plane (lower is better)
+
+A standard deviation below 0.04 mm is generally considered a well-calibrated delta.
+
+## Running delta calibration
+
+<Steps>
+  <Step title="Home the printer">
+    Send G28 to home all towers. G33 will not run on an unhomed machine.
+
+    ```gcode
+    G28
+    ```
+  </Step>
+
+  <Step title="Run a dry-run pass to assess current state">
+    Use `V0` to probe without changing any settings. This tells you how far out of calibration the printer currently is.
+
+    ```gcode
+    G33 P3 V0
+    ```
+  </Step>
+
+  <Step title="Run a full calibration">
+    Use `P3` (or higher for more accuracy) with the default verbosity. G33 will iterate automatically until it converges.
+
+    ```gcode
+    G33 P3
+    ```
+
+    For a more thorough initial calibration, force several iterations and probe more points:
+
+    ```gcode
+    G33 P6 F5
+    ```
+  </Step>
+
+  <Step title="Verify the result">
+    Run G33 again in dry-run mode to confirm the standard deviation is acceptably low.
+
+    ```gcode
+    G33 P3 V0
+    ```
+  </Step>
+
+  <Step title="Save the calibration">
+    Save the calibrated values to EEPROM so they persist across power cycles.
+
+    ```gcode
+    M500
+    ```
+  </Step>
+</Steps>
+
+## Examples
+
+Run calibration with default settings (uses `DELTA_CALIBRATION_DEFAULT_POINTS`):
+
+```gcode
+G33
+```
+
+Probe 3 points (center + towers + opposites), default verbosity:
+
+```gcode
+G33 P3
+```
+
+Probe 3 points with full per-iteration reporting:
+
+```gcode
+G33 P3 V2
+```
+
+Dry-run — probe 7-point pattern and report deviation without changing settings:
+
+```gcode
+G33 P3 V0
+```
+
+Probe 6-point pattern with intermediate positions, force 5 iterations, stop when std dev ≤ 0.02:
+
+```gcode
+G33 P6 F5 C0.02
+```
+
+Probe center only to set height (fast check after a nozzle change):
+
+```gcode
+G33 P1
+```
+
+## Related commands
+
+- [G28 — Auto home](/gcode/motion/G28)
+- M665 — Set delta parameters (height, radius, diagonal rod, tower angles)
+- M666 — Set delta endstop adjustments
+- [M500–M504 — EEPROM operations](/gcode/eeprom/M500-M504)

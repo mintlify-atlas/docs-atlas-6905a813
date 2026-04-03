@@ -1,0 +1,165 @@
+---
+title: "Filament runout sensor"
+description: "Detect and handle filament depletion during printing using a switch or encoder-based runout sensor."
+---
+
+The filament runout sensor monitors the filament path during a print. When the filament runs out or jams, Marlin pauses the print and executes a configurable G-code script — typically `M600` to trigger a filament change — so you can reload and continue without losing the print.
+
+<Note>
+Runout detection only activates while Marlin is aware that a print job is running. A job is considered active when: a file print started via `M24`, the print job timer was started with `M75`, or the heaters were turned on with `PRINTJOB_TIMER_AUTOSTART` enabled.
+</Note>
+
+## Enabling the sensor
+
+Uncomment `FILAMENT_RUNOUT_SENSOR` in `Configuration.h`:
+
+```cpp
+// Configuration.h
+#define FILAMENT_RUNOUT_SENSOR
+#if ENABLED(FILAMENT_RUNOUT_SENSOR)
+  #define FIL_RUNOUT_ENABLED_DEFAULT true // Sensor enabled on startup; override with M412 + M500
+  #define NUM_RUNOUT_SENSORS   1          // One sensor per extruder; define FIL_RUNOUT#_PIN for each
+
+  #define FIL_RUNOUT_STATE     LOW        // Pin state when filament is NOT present
+  #define FIL_RUNOUT_PULLUP               // Use internal pullup resistor
+  //#define FIL_RUNOUT_PULLDOWN           // Use internal pulldown resistor
+
+  // Commands to execute when runout is detected
+  // Use %c placeholder for tool number on multi-extruder setups (e.g., "M600 T%c")
+  #define FILAMENT_RUNOUT_SCRIPT "M600"
+#endif
+```
+
+On RAMPS-based boards the first runout sensor uses `SERVO3_PIN` by default. For other boards, define `FIL_RUNOUT_PIN` (and `FIL_RUNOUT2_PIN`, etc. for additional extruders) in your board's pins file or in `Configuration.h`.
+
+## Pin configuration
+
+Each sensor has its own state and pull resistor settings. Override them individually if your sensors differ:
+
+```cpp
+// Configuration.h — inside FILAMENT_RUNOUT_SENSOR block
+//#define FIL_RUNOUT1_STATE LOW
+//#define FIL_RUNOUT1_PULLUP
+//#define FIL_RUNOUT1_PULLDOWN
+
+//#define FIL_RUNOUT2_STATE LOW
+//#define FIL_RUNOUT2_PULLUP
+//#define FIL_RUNOUT2_PULLDOWN
+```
+
+Sensors 1 through 8 can be configured independently this way.
+
+## Runout distance (delayed response)
+
+By default, Marlin triggers the runout script the moment a runout is detected. For Bowden-style printers where the sensor is mounted at the extruder but the hot end is far away, you can configure a buffer distance. The runout script only fires after the specified length of filament has been fed following a runout event:
+
+```cpp
+// Configuration.h — inside FILAMENT_RUNOUT_SENSOR block
+
+// After a runout is detected, continue printing this length (mm) before executing the script.
+// Useful when the sensor is at the end of a long feed tube.
+//#define FILAMENT_RUNOUT_DISTANCE_MM 25
+```
+
+This option enables `RunoutResponseDelayed`, which tracks extrusion distance via the motion planner. Without it, the simpler `RunoutResponseDebounced` class is used, which requires the runout condition to be detected `FILAMENT_RUNOUT_THRESHOLD` (default: 5) times consecutively before triggering.
+
+## Motion sensor (encoder disc)
+
+When `FILAMENT_RUNOUT_DISTANCE_MM` is set, you can optionally use an encoder disc sensor instead of a simple switch. The encoder toggles its output pin as filament moves, letting Marlin detect not just absence of filament but also jams or clogs where the filament is present but not moving:
+
+```cpp
+// Configuration.h — inside FILAMENT_RUNOUT_DISTANCE_MM block
+//#define FILAMENT_MOTION_SENSOR
+
+#if ENABLED(FILAMENT_MOTION_SENSOR)
+  // Use separate pins for the presence switch and the motion encoder
+  //#define FILAMENT_SWITCH_AND_MOTION
+  #if ENABLED(FILAMENT_SWITCH_AND_MOTION)
+    #define FILAMENT_MOTION_DISTANCE_MM 3.0 // (mm) Missing motion distance to trigger runout
+    #define NUM_MOTION_SENSORS   1
+    //#define FIL_MOTION1_PIN    -1
+  #endif
+#endif
+```
+
+## What happens when runout is detected
+
+1. Marlin sets an internal `filament_ran_out` flag.
+2. The planner finishes any queued moves (`planner.synchronize()`).
+3. The `FILAMENT_RUNOUT_SCRIPT` is injected into the command queue. The default `"M600"` pauses the print, parks the nozzle, and prompts you to load new filament.
+4. After the filament change is confirmed (e.g. via the LCD or `M108`), printing resumes from where it stopped.
+
+If `HOST_ACTION_COMMANDS` is enabled, the host (OctoPrint, Pronterface, etc.) can handle the runout event instead of the on-board script.
+
+## M412 — enable/disable runout detection
+
+Use `M412` to toggle runout detection at runtime without reflashing:
+
+```gcode
+M412 S1   ; Enable runout detection
+M412 S0   ; Disable runout detection
+M412      ; Report current state
+```
+
+Pair with `M500` to persist the setting across reboots:
+
+```gcode
+M412 S1
+M500
+```
+
+## Setup procedure
+
+<Steps>
+  <Step title="Wire the sensor">
+    Connect the sensor signal wire to the designated runout pin on your board. Connect ground and (if not using the internal pullup) a 3.3 V or 5 V supply depending on your sensor's logic level.
+  </Step>
+
+  <Step title="Enable the feature and set pin state">
+    Uncomment `FILAMENT_RUNOUT_SENSOR` in `Configuration.h`. Set `FIL_RUNOUT_STATE` to the logic level your sensor outputs when filament is absent. Most mechanical switches read `LOW` when triggered with an internal pullup.
+
+    ```cpp
+    #define FILAMENT_RUNOUT_SENSOR
+    #define FIL_RUNOUT_STATE LOW
+    #define FIL_RUNOUT_PULLUP
+    ```
+  </Step>
+
+  <Step title="Configure the runout script">
+    Set `FILAMENT_RUNOUT_SCRIPT` to the G-code you want to run on a runout event. The standard filament change command is `M600`:
+
+    ```cpp
+    #define FILAMENT_RUNOUT_SCRIPT "M600"
+    ```
+  </Step>
+
+  <Step title="(Optional) Set a runout distance for Bowden printers">
+    If your sensor is at the extruder end of a long Bowden tube, set `FILAMENT_RUNOUT_DISTANCE_MM` to roughly the tube length so the printer has time to finish buffered moves before pausing:
+
+    ```cpp
+    #define FILAMENT_RUNOUT_DISTANCE_MM 25
+    ```
+  </Step>
+
+  <Step title="Flash and verify">
+    Build and flash the firmware. Use `M412` to confirm the sensor is enabled and check the pin state with `M119` — the runout pin should report `open` when filament is present and `TRIGGERED` when it is removed.
+
+    ```gcode
+    M412      ; Confirm runout enabled
+    M119      ; Check endstop/sensor states
+    ```
+  </Step>
+
+  <Step title="Save settings">
+    Persist the sensor state so it survives a power cycle:
+
+    ```gcode
+    M412 S1
+    M500
+    ```
+  </Step>
+</Steps>
+
+<Tip>
+To test your sensor without wasting filament, manually pull the filament out of the sensor body (or briefly disconnect the signal wire) while a print is running. The printer should pause and execute the runout script. Make sure you have `M412 S1` active before testing. Re-insert the filament and resume with `M108` or the LCD.
+</Tip>

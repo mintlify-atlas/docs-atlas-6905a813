@@ -1,0 +1,147 @@
+---
+title: "Installation"
+description: "Set up your development environment to build and flash Marlin firmware."
+---
+
+Marlin is built with [PlatformIO](https://platformio.org/), which handles toolchain downloads and dependency management automatically. The recommended workflow uses PlatformIO inside [Visual Studio Code](https://code.visualstudio.com/). Arduino IDE is also supported but is not the preferred choice.
+
+<Note>
+  Always work from the `bugfix-2.1.x` branch for the latest patches and bug fixes. This branch is not intended for production use — it tracks the active development baseline for the next 2.1.x release.
+</Note>
+
+## Before you start
+
+You need a configuration for your specific board before you can build Marlin. The [MarlinFirmware/Configurations](https://github.com/MarlinFirmware/Configurations) repository contains hundreds of community-contributed configurations. Make sure to check out the branch that matches your Marlin version — the [Marlin Download Page](https://marlinfw.org/meta/download/) lists compatible pairings.
+
+## Install the development environment
+
+<Tabs>
+  <Tab title="PlatformIO + VSCode (recommended)">
+    PlatformIO is the preferred build system for Marlin. It automatically downloads the correct toolchains, frameworks, and libraries for your target board.
+
+    <Steps>
+      <Step title="Install Visual Studio Code">
+        Download and install [Visual Studio Code](https://code.visualstudio.com/download) for your operating system.
+      </Step>
+
+      <Step title="Install the PlatformIO IDE extension">
+        Open VSCode, go to the Extensions panel (`Ctrl+Shift+X`), search for **PlatformIO IDE**, and click **Install**.
+
+        PlatformIO will download its core components on first launch — this may take a few minutes.
+      </Step>
+
+      <Step title="Install the Auto Build Marlin extension">
+        In the same Extensions panel, search for **Auto Build Marlin** and click **Install**.
+
+        This extension adds a dedicated sidebar panel for building and uploading Marlin without needing to touch the terminal.
+      </Step>
+
+      <Step title="Clone the Marlin repository">
+        Open a terminal and clone the `bugfix-2.1.x` branch:
+
+        ```bash
+        git clone -b bugfix-2.1.x https://github.com/MarlinFirmware/Marlin.git
+        ```
+
+        Then open the cloned folder in VSCode: **File → Open Folder** and select the `Marlin` directory.
+      </Step>
+
+      <Step title="Copy your configuration files">
+        From the [MarlinFirmware/Configurations](https://github.com/MarlinFirmware/Configurations) repository, find the folder matching your printer and board. Copy `Configuration.h` and `Configuration_adv.h` into `Marlin/Marlin/` (the inner `Marlin` source directory), replacing the example files that are already there.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Arduino IDE">
+    Arduino IDE is supported but requires more manual setup. PlatformIO is strongly preferred for new setups.
+
+    <Steps>
+      <Step title="Install Arduino IDE">
+        Download [Arduino IDE](https://www.arduino.cc/en/main/software) version 1.8.x. Marlin does not support the Arduino IDE 2.x series at this time.
+      </Step>
+
+      <Step title="Install board support packages">
+        For AVR boards (e.g., RAMPS, Melzi), the Arduino AVR core is included by default.
+
+        For 32-bit ARM boards, you need to add the appropriate board package through **File → Preferences → Additional Boards Manager URLs** and then install via **Tools → Board → Boards Manager**.
+      </Step>
+
+      <Step title="Install required libraries">
+        Marlin depends on several libraries. Install them through **Sketch → Include Library → Manage Libraries**. The exact set depends on your configuration — check your `Configuration.h` for enabled features and their library requirements.
+      </Step>
+
+      <Step title="Clone the Marlin repository">
+        ```bash
+        git clone -b bugfix-2.1.x https://github.com/MarlinFirmware/Marlin.git
+        ```
+
+        Open `Marlin/Marlin.ino` in Arduino IDE.
+      </Step>
+
+      <Step title="Copy your configuration files">
+        Copy `Configuration.h` and `Configuration_adv.h` from the [Configurations repository](https://github.com/MarlinFirmware/Configurations) into the `Marlin/` source folder, replacing the existing example files.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Dev container (VSCode)">
+    Marlin includes a `.devcontainer` configuration for VSCode, which runs the build environment inside a Docker container. This approach requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) and the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) VSCode extension.
+
+    <Steps>
+      <Step title="Install prerequisites">
+        Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and the **Dev Containers** extension in VSCode.
+      </Step>
+
+      <Step title="Clone the repository and open in VSCode">
+        ```bash
+        git clone -b bugfix-2.1.x https://github.com/MarlinFirmware/Marlin.git
+        ```
+
+        Open the `Marlin` folder in VSCode.
+      </Step>
+
+      <Step title="Reopen in container">
+        VSCode will detect the `.devcontainer/devcontainer.json` file and prompt you to **Reopen in Container**. Click it.
+
+        The container is built from `.devcontainer/Dockerfile`, which installs Python 3.9, the PlatformIO core, and PyYAML. The following extensions are installed automatically inside the container:
+
+        - `platformio.platformio-ide`
+        - `marlinfirmware.auto-build`
+        - `editorconfig.editorconfig`
+      </Step>
+
+      <Step title="Copy your configuration files">
+        Copy `Configuration.h` and `Configuration_adv.h` from the [Configurations repository](https://github.com/MarlinFirmware/Configurations) into `Marlin/Marlin/`.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Platform-specific notes
+
+<CodeGroup>
+
+```bash macOS
+# Install Homebrew if not already installed
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Python 3 is required for build scripts
+brew install python3
+```
+
+```bash Linux (Debian/Ubuntu)
+sudo apt-get update
+sudo apt-get install python3 python3-pip git
+```
+
+```powershell Windows
+# Install Git for Windows from https://git-scm.com/
+# Python 3 from https://www.python.org/downloads/
+# PlatformIO will be installed via the VSCode extension
+```
+
+</CodeGroup>
+
+## Next steps
+
+Once your environment is set up and your configuration files are in place, proceed to [Building Marlin](/getting-started/building) to compile the firmware.

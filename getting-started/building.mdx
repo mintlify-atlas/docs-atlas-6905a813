@@ -1,0 +1,195 @@
+---
+title: "Building Marlin"
+description: "Compile Marlin firmware for your 3D printer board using PlatformIO or Arduino IDE."
+---
+
+Marlin uses [PlatformIO](https://platformio.org/) as its primary build system. Each supported board has a named environment defined across the `platformio.ini` file and the per-architecture `ini/` files. You select the right environment for your board, then build.
+
+## Select your build environment
+
+The top-level `platformio.ini` sets the default environment to `mega2560`:
+
+```ini
+[platformio]
+src_dir      = Marlin
+boards_dir   = buildroot/share/PlatformIO/boards
+default_envs = mega2560
+```
+
+Change `default_envs` to match your board. Environment names follow the pattern `[env:<name>]` throughout the `ini/` files. Some common examples:
+
+| Environment | Board | MCU |
+|---|---|---|
+| `mega2560` | RAMPS, generic ATmega2560 boards | ATmega2560 |
+| `mega1280` | Boards using ATmega1280 | ATmega1280 |
+| `rambo` | RAMBo | ATmega2560 |
+| `melzi` | Melzi and clones | ATmega1284p |
+| `sanguino1284p` | Sanguinololu | ATmega1284p |
+| `BTT_SKR_PRO` | BigTreeTech SKR Pro | STM32F407ZGT6 |
+| `STM32F446ZE_btt` | BTT Octopus V1.0/1.1, Octopus Pro V1.0 | STM32F446ZET6 |
+| `STM32F407VG_btt` | BigTreeTech SKR V2.0 | STM32F407VGT6 |
+| `STM32F401RC_creality` | Creality Ender-3 S1 boards | STM32F401RC |
+| `mks_robin_nano_v3` | MKS Robin Nano V3 | STM32F407VGT6 |
+| `rumba32` | RUMBA32 | STM32F446VE |
+| `DUE` | Arduino Due, RAMPS-FD | SAM3X8E |
+
+Edit the `default_envs` line in `platformio.ini`:
+
+```ini
+[platformio]
+default_envs = BTT_SKR_PRO
+```
+
+You can also specify multiple environments to build at once:
+
+```ini
+[platformio]
+default_envs = mega2560, rambo
+```
+
+## Build the firmware
+
+<Tabs>
+  <Tab title="PlatformIO CLI">
+    <Steps>
+      <Step title="Navigate to the Marlin directory">
+        ```bash
+        cd path/to/Marlin
+        ```
+      </Step>
+
+      <Step title="Build the default environment">
+        ```bash
+        platformio run
+        ```
+
+        To build a specific environment without editing `platformio.ini`:
+
+        ```bash
+        platformio run -e mega2560
+        ```
+      </Step>
+
+      <Step title="Locate the compiled firmware">
+        After a successful build, the output binary is placed in:
+
+        ```
+        .pio/build/<env-name>/firmware.bin
+        ```
+
+        For AVR boards (e.g., `mega2560`), the output is `firmware.hex`. For most 32-bit ARM boards, it is `firmware.bin`. Some board environments rename the output file — for example, `BTT_SKR_PRO` produces `firmware.bin`, while `mks_robin_nano_v3` produces `Robin_nano_v3.bin`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="VSCode (Auto Build Marlin)">
+    <Steps>
+      <Step title="Open the Marlin folder in VSCode">
+        Use **File → Open Folder** and select the `Marlin` repository root.
+      </Step>
+
+      <Step title="Open the Auto Build Marlin panel">
+        Click the **Auto Build Marlin** icon in the VSCode Activity Bar (left sidebar). It shows available environments based on your `platformio.ini`.
+      </Step>
+
+      <Step title="Select your environment and build">
+        Find your board's environment in the list and click the **Build** button (hammer icon) next to it. Build output appears in the VSCode terminal panel.
+      </Step>
+
+      <Step title="Check the output">
+        A successful build ends with output similar to:
+
+        ```
+        ========================= [SUCCESS] Took 45.23 seconds =========================
+        ```
+
+        The compiled binary is in `.pio/build/<env-name>/`.
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Arduino IDE">
+    <Steps>
+      <Step title="Select your board">
+        Go to **Tools → Board** and select the board matching your hardware (e.g., **Arduino Mega 2560** for RAMPS-based printers).
+      </Step>
+
+      <Step title="Select the correct port">
+        Go to **Tools → Port** and select the serial port your board is connected to.
+      </Step>
+
+      <Step title="Verify (compile)">
+        Click the **Verify** button (checkmark icon) or use **Sketch → Verify/Compile**.
+
+        Compilation errors are shown in the output panel at the bottom. If you see errors about missing libraries, install them via **Sketch → Include Library → Manage Libraries**.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Using Docker for builds
+
+Marlin includes a `docker/Dockerfile` that sets up a complete build environment based on Python 3.11. To build and run the Docker image:
+
+```bash
+# Build the Docker image (only needed once)
+make setup-local-docker
+
+# Build Marlin inside Docker
+docker run --rm -v $(PWD):/code -v platformio-cache:/root/.platformio marlin-dev \
+  platformio run -e mega2560
+```
+
+## Running build tests
+
+Marlin's `buildroot/tests/` directory contains a suite of CI build tests, one per supported environment. You can run these locally using `make`:
+
+```bash
+# Run all tests locally
+make tests-all-local
+
+# Run a single test
+make tests-single-local TEST_TARGET=mega2560
+
+# Run all tests inside Docker
+make tests-all-local-docker
+
+# Run a single test inside Docker
+make tests-single-local-docker TEST_TARGET=mega2560
+```
+
+You can also run unit tests using PlatformIO directly:
+
+```bash
+# Run all unit test suites
+platformio run -t test-marlin -e linux_native_test
+
+# Run a single unit test suite
+platformio run -t marlin_default -e linux_native_test
+```
+
+Or via `make`:
+
+```bash
+# All unit tests
+make unit-test-all-local
+
+# Single unit test suite
+make unit-test-single-local UNIT_TEST_CONFIG=default
+```
+
+<Note>
+  `make tests-all-local` requires the `pyyaml` Python package. Install it with `python3 -m pip install pyyaml` if you see an error about a missing `yaml` module.
+</Note>
+
+## Common build errors
+
+**`fmax-errors=5`** — By default, the build stops after five errors. To see all errors, remove `-fmax-errors=5` from the `build_flags` in `platformio.ini` under the `[common]` section.
+
+**Board not found** — Make sure the environment name in `default_envs` exactly matches a `[env:<name>]` block in `platformio.ini` or one of the included `ini/` files.
+
+**Out of flash / SRAM** — Disable unused features in `Configuration.h` and `Configuration_adv.h` to reduce firmware size. 8-bit AVR boards have tight constraints.
+
+## Next steps
+
+After a successful build, proceed to [Flashing Firmware](/getting-started/flashing) to upload the compiled binary to your printer board.

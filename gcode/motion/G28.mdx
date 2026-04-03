@@ -1,0 +1,120 @@
+---
+title: "G28 — Auto home"
+description: "Home one or more axes by moving to the endstops"
+---
+
+G28 homes the printer by moving each axis toward its endstop until the switch triggers, then backing off to establish the home position. After homing, the firmware knows the absolute position of the toolhead and soft endstop limits become active.
+
+With no parameters, G28 homes all axes. You can home individual axes by including their letters as flags.
+
+<Warning>
+  Always make sure your endstops are properly wired and functioning before running G28. If an endstop does not trigger, the axis will keep moving until it hits a physical limit. Verify endstop state with M119 before homing.
+</Warning>
+
+## Syntax
+
+```gcode
+G28 [X] [Y] [Z] [O] [R<distance>] [L<bool>] [H]
+```
+
+## Parameters
+
+<ParamField path="X" type="flag">
+  Home the X axis. If none of X, Y, or Z are specified, all axes are homed.
+</ParamField>
+
+<ParamField path="Y" type="flag">
+  Home the Y axis.
+</ParamField>
+
+<ParamField path="Z" type="flag">
+  Home the Z axis.
+</ParamField>
+
+<ParamField path="O" type="flag">
+  Skip homing an axis if its position is already known and trusted. Useful for scripts that call G28 defensively — if the printer is already homed, the command returns immediately with no movement.
+</ParamField>
+
+<ParamField path="R" type="float">
+  Raise the Z axis by this many mm before performing any lateral (XY) homing moves, overriding the firmware's default `Z_CLEARANCE_FOR_HOMING`. Use `R0` to suppress the raise entirely (only safe if you are confident there is already adequate clearance). This parameter requires `HAS_Z_AXIS`.
+</ParamField>
+
+<ParamField path="L" type="boolean">
+  Force the leveling state after homing: `L1` to enable, `L0` to disable. Requires `RESTORE_LEVELING_AFTER_G28` or `ENABLE_LEVELING_AFTER_G28` to be compiled in.
+</ParamField>
+
+<ParamField path="H" type="flag">
+  Hold the current XY position when homing Z, instead of moving to the safe homing point defined by `Z_SAFE_HOMING_X_POINT` / `Z_SAFE_HOMING_Y_POINT`. Useful to avoid a model or to probe close to the current position.
+</ParamField>
+
+## Homing sequence
+
+For Cartesian and CoreXY printers the default homing order is:
+
+1. **Z raise** — The toolhead is raised by `Z_CLEARANCE_FOR_HOMING` (or the value given by `R`) so that lateral movement during homing does not drag the nozzle across the bed.
+2. **X and Y** — X is homed, then Y (or Y before X if `HOME_Y_BEFORE_X` is enabled). When `QUICK_HOME` is enabled, X and Y home simultaneously along a diagonal.
+3. **Z** — After X and Y are known, Z homes last. When `Z_SAFE_HOMING` is enabled, the toolhead first moves to the configured safe XY probing position before descending.
+
+After homing the firmware reports the current position.
+
+<Note>
+  Leveling (bed mesh or probe compensation) is temporarily disabled during homing and re-enabled afterwards according to the `RESTORE_LEVELING_AFTER_G28` setting. This ensures the homing move is not distorted by an existing compensation mesh.
+</Note>
+
+<Note>
+  When `SENSORLESS_HOMING` is used (StallGuard-based homing via TMC drivers), the firmware enables stallguard detection before moving and disables it again after homing completes. The `IMPROVE_HOMING_RELIABILITY` option reduces acceleration and jerk during homing to reduce false triggers. Tune `M914` to set the appropriate sensitivity for your machine.
+</Note>
+
+## Behavior on delta printers
+
+On delta kinematics, all three towers home simultaneously to the top (maximum) position using `home_delta()`. The `Z_CLEARANCE_FOR_HOMING` raise and individual-axis parameters do not apply.
+
+## Examples
+
+Home all axes:
+
+```gcode
+G28
+```
+
+Home X and Y only (leave Z position unchanged):
+
+```gcode
+G28 X Y
+```
+
+Home all axes, but skip any already homed:
+
+```gcode
+G28 O
+```
+
+Raise Z 20 mm before homing X and Y:
+
+```gcode
+G28 X Y R20
+```
+
+Home Z, holding the current XY position (no move to safe homing point):
+
+```gcode
+G28 Z H
+```
+
+Typical start-of-print sequence:
+
+```gcode
+G28          ; Home all axes
+G29          ; Run bed leveling (if configured)
+G1 Z5 F3000  ; Lift nozzle before moving to start position
+```
+
+## Related commands
+
+- [G0/G1 — Linear move](/gcode/motion/G0-G1)
+- [G90/G91 — Absolute/relative positioning](/gcode/motion/G90-G91)
+- G29 — Bed leveling
+- G92 — Set current position
+- M119 — Report endstop states
+- M206 — Set homing offset
+- M914 — Set sensorless homing sensitivity (requires TMC drivers)

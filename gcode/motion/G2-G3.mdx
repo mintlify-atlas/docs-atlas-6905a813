@@ -1,0 +1,128 @@
+---
+title: "G2/G3 — Arc move"
+description: "Move in a clockwise (G2) or counter-clockwise (G3) arc"
+---
+
+G2 and G3 trace a circular arc in the XY plane (or an alternate plane when `CNC_WORKSPACE_PLANES` is enabled). The arc is broken into many small linear segments by Marlin's `plan_arc` function. You can specify the arc center using I/J offsets from the current position, or specify the radius directly with R.
+
+<Note>
+  Arc support requires `ARC_SUPPORT` to be enabled in the firmware configuration. If your build does not include it, G2 and G3 will not be recognized.
+</Note>
+
+## Syntax
+
+```gcode
+G2 [X<pos>] [Y<pos>] [Z<pos>] [I<offset>] [J<offset>] [E<pos>] [F<rate>] [P<circles>]
+G2 [X<pos>] [Y<pos>] [Z<pos>] [R<radius>]  [E<pos>] [F<rate>]
+
+G3 [X<pos>] [Y<pos>] [Z<pos>] [I<offset>] [J<offset>] [E<pos>] [F<rate>] [P<circles>]
+G3 [X<pos>] [Y<pos>] [Z<pos>] [R<radius>]  [E<pos>] [F<rate>]
+```
+
+## Parameters
+
+<ParamField path="X" type="float">
+  Target X position at the end of the arc, in mm. Omit (with IJ-form) to end at the current X, which produces a full circle.
+</ParamField>
+
+<ParamField path="Y" type="float">
+  Target Y position at the end of the arc, in mm. Omit (with IJ-form) to end at the current Y, which produces a full circle.
+</ParamField>
+
+<ParamField path="Z" type="float">
+  Target Z position at the end of the arc, in mm. If provided, the toolhead moves linearly along Z while traversing the arc (helical move).
+</ParamField>
+
+<ParamField path="I" type="float">
+  X offset from the current position to the arc center, in mm. Used in IJ-form. At least one of I or J must be non-zero.
+</ParamField>
+
+<ParamField path="J" type="float">
+  Y offset from the current position to the arc center, in mm. Used in IJ-form. At least one of I or J must be non-zero.
+</ParamField>
+
+<ParamField path="R" type="float">
+  Radius of the arc in mm. Used as an alternative to I/J. A negative radius selects the larger of the two possible arcs between the start and end points. You must specify a destination (X and/or Y) when using R-form; mixing R with I/J is an error.
+</ParamField>
+
+<ParamField path="E" type="float">
+  Extruder position (or amount to extrude) over the arc. Works the same as in G1.
+</ParamField>
+
+<ParamField path="F" type="float">
+  Feedrate in mm/min. Saved as the current feedrate for subsequent moves.
+</ParamField>
+
+<ParamField path="P" type="integer">
+  Number of complete circles to execute before the final arc segment. Requires `ARC_P_CIRCLES` to be enabled in firmware. Valid range is 0–100.
+</ParamField>
+
+## IJ-form vs. R-form
+
+**IJ-form** specifies the arc center as offsets from the current position. `I` is the X offset and `J` is the Y offset. This form is unambiguous and supports full circles (when X and Y are omitted or equal to the starting position).
+
+**R-form** specifies the arc radius. Marlin calculates the center automatically. Because two arcs are mathematically possible for any given radius and pair of endpoints, a positive `R` selects the minor arc (≤ 180°) and a negative `R` selects the major arc (> 180°). R-form cannot produce full circles.
+
+<Warning>
+  Do not mix I/J with R in the same command. Marlin will report an error (`STR_ERR_ARC_ARGS`) and the move will not execute.
+</Warning>
+
+## Workspace planes
+
+By default arcs are planned in the XY plane. When `CNC_WORKSPACE_PLANES` is enabled you can switch the active plane with G17 (XY), G18 (ZX), or G19 (YZ). The I/J offsets correspond to the two primary axes of the active plane.
+
+| Active plane | Offset axes |
+|---|---|
+| XY (G17, default) | I = X offset, J = Y offset |
+| ZX (G18) | K = Z offset, I = X offset |
+| YZ (G19) | J = Y offset, K = Z offset |
+
+## Arc segmentation
+
+Marlin converts the arc into a series of small linear segments. Segment size is controlled by `MIN_ARC_SEGMENT_MM`, `MAX_ARC_SEGMENT_MM`, and optionally `ARC_SEGMENTS_PER_SEC`. Full circles use at least `MIN_CIRCLE_SEGMENTS` (default: 72) segments to ensure smoothness.
+
+Arc path correction (`N_ARC_CORRECTION`) periodically recalculates exact positions using trigonometry to prevent drift from the small-angle approximation used between corrections.
+
+## Examples
+
+Clockwise quarter-circle from (0, 0) to (10, -10), centered at (10, 0):
+
+```gcode
+G2 X10 Y-10 I10 J0
+```
+
+Counter-clockwise full circle (radius 20 mm) centered 20 mm to the right of the current position:
+
+```gcode
+G3 I20
+```
+
+Clockwise arc using R-form, moving to X=20 Y=0 with a radius of 20 mm:
+
+```gcode
+G2 X20 Y0 R20
+```
+
+Clockwise arc with extrusion (printing a curve):
+
+```gcode
+G2 X50 Y50 I25 J0 E3.5 F1200
+```
+
+Two full circles then end at X=30 Y=0, extruding continuously (requires `ARC_P_CIRCLES`):
+
+```gcode
+G2 X30 Y0 I15 E10 P2
+```
+
+Helical move: arc in XY while descending 5 mm in Z:
+
+```gcode
+G2 X10 Y10 I10 J0 Z-5 F600
+```
+
+## Related commands
+
+- [G0/G1 — Linear move](/gcode/motion/G0-G1)
+- [G90/G91 — Absolute/relative positioning](/gcode/motion/G90-G91)
+- G17/G18/G19 — Select workspace plane (requires `CNC_WORKSPACE_PLANES`)
